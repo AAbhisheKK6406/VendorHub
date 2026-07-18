@@ -522,3 +522,130 @@ def update_inventory_after_sale(sale_id, vendor_id):
         if 'cursor' in locals():
             cursor.close()
         close_database_connection(connection)
+
+def generate_invoice(sale_id, vendor_id):
+    """
+    Compiles relational transaction parameters into a comprehensive, human-readable
+    invoice data structure payload framework using the explicit vendors schema.
+    
+    Args:
+        sale_id (int): The target sale record database identifier.
+        vendor_id (int): The ID of the operating vendor session.
+        
+    Returns:
+        dict: Success status and operational invoice data payload.
+    """
+    if not sale_id or not vendor_id:
+        return {"success": False, "message": "Validation Failure: Sale ID and Vendor ID are mandatory.", "invoice_data": None}
+
+    connection = get_database_connection()
+    if not connection:
+        return {"success": False, "message": "Database pipeline offline.", "invoice_data": None}
+
+    try:
+        cursor = connection.cursor(dictionary=True)
+
+        # 1. Retrieve Core Bill Header Details
+        bill_query = """
+            SELECT sale_id, bill_number, customer_id, sale_date, subtotal, 
+                   discount, discount_type, tax, gst_percentage, total_amount, 
+                   payment_method, payment_status 
+            FROM sales 
+            WHERE sale_id = %s
+        """
+        cursor.execute(bill_query, (sale_id,))
+        bill_record = cursor.fetchone()
+
+        if not bill_record:
+            return {"success": False, "message": "Security Alert: Bill not found.", "invoice_data": None}
+
+        # 2. Retrieve Vendor Details using precise schema columns: id, business_name, phone
+        vendor_query = """
+            SELECT username, business_name, phone, email 
+            FROM vendors 
+            WHERE id = %s
+        """
+        cursor.execute(vendor_query, (vendor_id,))
+        vendor_record = cursor.fetchone()
+        
+        vendor_details = {
+            "vendor_id": vendor_id,
+            "shop_name": vendor_record["business_name"] if vendor_record and vendor_record["business_name"] else "VendorHub Partner",
+            "owner_name": vendor_record["username"] if vendor_record else "Vendor Account",
+            "phone": vendor_record["phone"] if vendor_record and vendor_record["phone"] else "N/A",
+            "email": vendor_record["email"] if vendor_record and vendor_record["email"] else "N/A"
+        }
+
+        # 3. Retrieve Customer Profile Details (With safety checks for customer id variations)
+        customer_record = None
+        target_customer_id = bill_record['customer_id']
+        try:
+            cursor.execute("SELECT customer_name, phone, email, address FROM customers WHERE customer_id = %s", (target_customer_id,))
+            customer_record = cursor.fetchone()
+        except Exception:
+            cursor.execute("SELECT customer_name, phone, email, address FROM customers WHERE id = %s", (target_customer_id,))
+            customer_record = cursor.fetchone()
+        
+        customer_details = {
+            "customer_id": target_customer_id,
+            "customer_name": customer_record['customer_name'] if customer_record else "Walk-in Customer",
+            "phone": customer_record['phone'] if customer_record else "N/A",
+            "email": customer_record['email'] if customer_record else "N/A",
+            "address": customer_record['address'] if customer_record else "N/A"
+        }
+
+        # 4. Retrieve Itemized Product Rows using Relational Join
+        items_query = """
+            SELECT si.product_id, p.product_name, si.quantity, si.unit_price, si.subtotal 
+            FROM sale_items si
+            LEFT JOIN products p ON si.product_id = p.product_id
+            WHERE si.sale_id = %s
+        """
+        cursor.execute(items_query, (sale_id,))
+        items_records = cursor.fetchall()
+
+        product_list = []
+        for item in items_records:
+            product_list.append({
+                "product_id": item['product_id'],
+                "product_name": item['product_name'] if item['product_name'] else f"product #{item['product_id']}",
+                "quantity": int(item['quantity']),
+                "unit_price": float(item['unit_price']),
+                "total_line_price": float(item['subtotal'])
+            })
+
+        # 5. Build Final Normalized Payload Contract
+        invoice_payload = {
+            "vendor_details": vendor_details,
+            "customer_details": customer_details,
+            "bill_details": {
+                "sale_id": bill_record['sale_id'],
+                "bill_number": bill_record['bill_number'],
+                "date": bill_record['sale_date'].strftime("%Y-%m-%d %H:%M:%S") if bill_record['sale_date'] else "N/A",
+                "payment_method": bill_record['payment_method'],
+                "status": bill_record['payment_status']
+            },
+            "products": product_list,
+            "financial_summary": {
+                "subtotal": float(bill_record['subtotal']),
+                "discount_applied": float(bill_record['discount']),
+                "discount_type_rule": bill_record['discount_type'],
+                "tax_applied": float(bill_record['tax']),
+                "gst_percentage": float(bill_record['gst_percentage']),
+                "grand_total": float(bill_record['total_amount'])
+            }
+        }
+
+        return {
+            "success": True,
+            "message": "Invoice layout dataset successfully generated.",
+            "invoice_data": invoice_payload
+        }
+
+    except Error as db_error:
+        return {"success": False, "message": f"Database processing exception running invoice: {db_error}", "invoice_data": None}
+
+    finally:
+        if 'cursor' in locals() and cursor:
+            cursor.close()
+        close_database_connection(connection)
