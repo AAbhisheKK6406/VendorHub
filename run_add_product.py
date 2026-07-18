@@ -110,10 +110,8 @@ def run_complete_billing_integration_test():
         close_database_connection(connection)
 
 if __name__ == "__main__":
-    run_complete_billing_integration_test()"""
+    run_complete_billing_integration_test()
 
-import os
-import sys
 
 # Maintain clean import paths relative to app structure
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '.')))
@@ -205,4 +203,152 @@ def run_finalize_bill_tests():
         close_database_connection(connection)
 
 if __name__ == "__main__":
-    run_finalize_bill_tests()
+    run_finalize_bill_tests()"""
+import os
+import sys
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '.')))
+
+from database.db import get_database_connection, close_database_connection
+from services.billing_service import create_bill, add_product_to_bill, calculate_bill_total, finalize_bill, update_inventory_after_sale
+
+def run_inventory_deduction_tests():
+    print("========== RUNNING VENDORHUB INVENTORY DEDUCTION TEST SUITE ==========\n")
+    
+    VALID_VENDOR_ID = 1
+    INVALID_VENDOR_ID = 8888
+    VALID_CUSTOMER_ID = 1
+    PRODUCT_1_ID = 1
+    PRODUCT_2_ID = 2
+
+    connection = get_database_connection()
+    if not connection:
+        print("❌ Setup Failure: Database pipeline down.")
+        return
+
+    try:
+        cursor = connection.cursor(dictionary=True)
+
+        # Base Reference Read: Fetch starting quantities directly from the products table
+        cursor.execute("SELECT quantity FROM products WHERE product_id = %s", (PRODUCT_1_ID,))
+        p1_initial = cursor.fetchone()["quantity"]
+        cursor.execute("SELECT quantity FROM products WHERE product_id = %s", (PRODUCT_2_ID,))
+        p2_initial = cursor.fetchone()["quantity"]
+
+    # ====================================================
+        # TEST 1: SUCCESSFUL DEDUCTION WITH MULTIPLE PRODUCTS
+        # ====================================================
+        print("Test 1: Running Multi-Product Successful Deduction Pipeline...")
+        bill_setup = create_bill(vendor_id=VALID_VENDOR_ID, customer_id=VALID_CUSTOMER_ID)
+        sale_id = bill_setup["bill_data"]["sale_id"]
+        
+        # 1. These calls add items and drop inventory via their own closed connections
+        add_product_to_bill(sale_id=sale_id, product_id=PRODUCT_1_ID, requested_quantity=2)
+        add_product_to_bill(sale_id=sale_id, product_id=PRODUCT_2_ID, requested_quantity=1)
+        
+        calculate_bill_total(sale_id, VALID_VENDOR_ID, 'fixed', 0, 0, 'Cash', 'Unpaid')
+        finalize_bill(sale_id=sale_id, vendor_id=VALID_VENDOR_ID)
+        
+        # 2. REFRESH: Close old test cursor/connection and open a fresh one to capture the true intermediate quantities
+        cursor.close()
+        close_database_connection(connection)
+        
+        connection = get_database_connection()
+        cursor = connection.cursor(dictionary=True)
+        
+        # Read what the inventory actually is right now, AFTER add_product_to_bill processed
+        cursor.execute("SELECT quantity FROM products WHERE product_id = %s", (PRODUCT_1_ID,))
+        p1_after_add = cursor.fetchone()["quantity"]
+        cursor.execute("SELECT quantity FROM products WHERE product_id = %s", (PRODUCT_2_ID,))
+        p2_after_add = cursor.fetchone()["quantity"]
+        
+        # 3. Now run the post-finalize inventory reduction function
+        result = update_inventory_after_sale(sale_id=sale_id, vendor_id=VALID_VENDOR_ID)
+        assert result["success"] is True, f"Test 1 Failed: {result['message']}"
+        
+        # 4. REFRESH AGAIN: Grab a clean connection to verify the final finalization drop
+        cursor.close()
+        close_database_connection(connection)
+        
+        connection = get_database_connection()
+        cursor = connection.cursor(dictionary=True)
+        
+        # Assert that update_inventory_after_sale dropped the stock by another 2 and 1 respectively
+        cursor.execute("SELECT quantity FROM products WHERE product_id = %s", (PRODUCT_1_ID,))
+        assert cursor.fetchone()["quantity"] == (p1_after_add - 2), "Test 1 Failed: Product 1 stock mismatch."
+        
+        cursor.execute("SELECT quantity FROM products WHERE product_id = %s", (PRODUCT_2_ID,))
+        assert cursor.fetchone()["quantity"] == (p2_after_add - 1), "Test 1 Failed: Product 2 stock mismatch."
+        print("✅ Test 1 Passed: Stock totals updated accurately for multiple lines.\n")
+
+        # ====================================================
+        # TEST 2: INVALID SALE ID EXCEPTION HANDLING
+        # ====================================================
+        print("Test 2: Verifying Invalid Sale ID Handling...")
+        result = update_inventory_after_sale(sale_id=999999, vendor_id=VALID_VENDOR_ID)
+        assert result["success"] is False, "Test 2 Failed: Accepted a non-existent sale ID matching constraint."
+        print("✅ Test 2 Passed: Ghost sale ID rejected correctly.\n")
+
+        # ====================================================
+        # TEST 3: INVALID VENDOR CROSS-TENANT SAFETY HANDLER
+        # ====================================================
+        print("Test 3: Verifying Tenant Isolation Boundaries...")
+        result = update_inventory_after_sale(sale_id=sale_id, vendor_id=INVALID_VENDOR_ID)
+        assert result["success"] is False, "Test 3 Failed: Cross-tenant data alterations permitted."
+        print("✅ Test 3 Passed: Unauthorized cross-tenant call blocked safely.\n")
+
+        # ====================================================
+        # TEST 4: INSUFFICIENT STOCK TRANSACTIONAL ROLLBACK
+        # ====================================================
+        print("Test 4: Verifying Insufficient Stock and Transactional Rollback...")
+        fail_bill = create_bill(vendor_id=VALID_VENDOR_ID, customer_id=VALID_CUSTOMER_ID)
+        fail_sale_id = fail_bill["bill_data"]["sale_id"]
+        
+        # Link normal items first
+        add_product_to_bill(sale_id=fail_sale_id, product_id=PRODUCT_1_ID, requested_quantity=1)
+        add_product_to_bill(sale_id=fail_sale_id, product_id=PRODUCT_2_ID, requested_quantity=1)
+        
+        # Force an explicit connection synchronization to modify the item quantity to an impossible amount
+        cursor.close()
+        close_database_connection(connection)
+        
+        connection = get_database_connection()
+        cursor = connection.cursor(dictionary=True)
+        
+        # Manually alter the line item quantity and permanently commit it so the service function reads it
+        cursor.execute("UPDATE sale_items SET quantity = 99999 WHERE sale_id = %s AND product_id = %s", (fail_sale_id, PRODUCT_2_ID))
+        connection.commit() # 👈 Fixes the ghost rollback issue
+        
+        calculate_bill_total(fail_sale_id, VALID_VENDOR_ID, 'fixed', 0, 0, 'UPI', 'Unpaid')
+        finalize_bill(sale_id=fail_sale_id, vendor_id=VALID_VENDOR_ID)
+        
+        # Capture stock level right before the finalization function fires
+        cursor.execute("SELECT quantity FROM products WHERE product_id = %s", (PRODUCT_1_ID,))
+        p1_before_finalization = cursor.fetchone()["quantity"]
+        
+        # Run execution engine call
+        result = update_inventory_after_sale(sale_id=fail_sale_id, vendor_id=VALID_VENDOR_ID)
+        
+        assert result["success"] is False, "Test 4 Failed: Allowed a transaction that exceeded available inventory."
+        assert "stockout failure" in result["message"].lower() or "insufficient stock" in result["message"].lower()
+        
+        # SQL verification query: Asserting absolute rollback parity on Product 1 stock levels back to pre-finalization state
+        cursor.close()
+        close_database_connection(connection)
+        connection = get_database_connection()
+        cursor = connection.cursor(dictionary=True)
+        
+        cursor.execute("SELECT quantity FROM products WHERE product_id = %s", (PRODUCT_1_ID,))
+        assert cursor.fetchone()["quantity"] == p1_before_finalization, "Rollback Assertion Failure: Product 1 stock was altered during a failed transaction!"
+        print("✅ Test 4 Passed: Out-of-stock condition hit cleanly; database transaction rolled back perfectly.\n")
+
+   # except AssertionError as assert_err:
+        #print(f"❌ Test Assertion Failure: {assert_err}")
+    #except Exception as error:
+        #print(f"❌ Unexpected script crash tracking logs: {error}")
+    finally:
+        cursor.close()
+        close_database_connection(connection)
+
+if __name__ == "__main__":
+    run_inventory_deduction_tests()

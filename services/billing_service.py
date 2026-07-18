@@ -398,3 +398,127 @@ def finalize_bill(sale_id, vendor_id):
         if 'cursor' in locals():
             cursor.close()
         close_database_connection(connection)
+
+def update_inventory_after_sale(sale_id, vendor_id):
+    """
+    Deducts product inventory levels from the products master table based on line items 
+    associated with a strictly finalized sale record. Operates atomically.
+    
+    Args:
+        sale_id (int): The unique identifier of the finalized sale record.
+        vendor_id (int): The ID of the authenticated operating vendor.
+        
+    Returns:
+        dict: Success status, processing logs, and execution data payload summary.
+    """
+    if not sale_id or not vendor_id:
+        return {"success": False, "message": "Validation Failure: Sale ID and Vendor ID are mandatory.", "deduction_summary": None}
+
+    connection = get_database_connection()
+    if not connection:
+        return {"success": False, "message": "Database pipeline offline.", "deduction_summary": None}
+
+    try:
+        connection.start_transaction()
+        cursor = connection.cursor(dictionary=True)
+
+        # 1. Tenancy and Finalization State Guard
+        bill_query = """
+            SELECT sale_id, payment_status, bill_number 
+            FROM sales 
+            WHERE sale_id = %s AND vendor_id = %s
+        """
+        cursor.execute(bill_query, (sale_id, vendor_id))
+        bill_record = cursor.fetchone()
+
+        if not bill_record:
+            connection.rollback()
+            return {"success": False, "message": "Security Alert: Bill not found or access denied.", "deduction_summary": None}
+
+        if bill_record['payment_status'] != 'Paid':
+            connection.rollback()
+            return {"success": False, "message": f"Operation Blocked: Cannot deduct inventory. Bill {bill_record['bill_number']} is not finalized.", "deduction_summary": None}
+
+        # 2. Gather All Purchased Line Items
+        items_query = """
+            SELECT product_id, quantity, subtotal 
+            FROM sale_items 
+            WHERE sale_id = %s
+        """
+        cursor.execute(items_query, (sale_id,))
+        purchased_items = cursor.fetchall()
+
+        if not purchased_items:
+            connection.rollback()
+            return {"success": False, "message": "Processing Failure: No line items found on this bill to deduct.", "deduction_summary": None}
+
+        deducted_items_log = []
+
+        # 3. Process Atomic Stock Verification and Reduction Loop
+        for item in purchased_items:
+            prod_id = item['product_id']
+            qty_sold = int(item['quantity'])
+
+            # Row locking read query ensures data accuracy across concurrent sessions
+            product_query = """
+                SELECT product_name, quantity 
+                FROM products 
+                WHERE product_id = %s AND vendor_id = %s
+                FOR UPDATE
+            """
+            cursor.execute(product_query, (prod_id, vendor_id))
+            product_record = cursor.fetchone()
+
+            if not product_record:
+                connection.rollback()
+                return {"success": False, "message": f"Inventory Integrity Error: Product ID {prod_id} missing from vendor registry.", "deduction_summary": None}
+
+            current_stock = int(product_record['quantity'])
+
+            # Real-time velocity verification guard
+            if current_stock < qty_sold:
+                connection.rollback()
+                return {
+                    "success": False, 
+                    "message": f"Stockout Failure: '{product_record['product_name']}' has insufficient stock. Available: {current_stock}, Required: {qty_sold}. Entire transaction rolled back.", 
+                    "deduction_summary": None
+                }
+
+            # Update master stock totals
+            update_stock_query = """
+                UPDATE products 
+                SET quantity = quantity - %s 
+                WHERE product_id = %s AND vendor_id = %s
+            """
+            cursor.execute(update_stock_query, (qty_sold, prod_id, vendor_id))
+            
+            deducted_items_log.append({
+                "product_id": prod_id,
+                "product_name": product_record['product_name'],
+                "quantity_deducted": qty_sold,
+                "remaining_stock": current_stock - qty_sold
+            })
+
+        # Everything passed cleanly, commit the complete transaction block
+        connection.commit()
+
+        return {
+            "success": True,
+            "message": f"Successfully updated inventory allocations for Bill {bill_record['bill_number']}.",
+            "deduction_summary": {
+                "sale_id": sale_id,
+                "bill_number": bill_record['bill_number'],
+                "processed_items_count": len(deducted_items_log),
+                "items": deducted_items_log
+            }
+        }
+
+    except Error as db_error:
+        if connection:
+            connection.rollback()
+        return {"success": False, "message": f"Database transactional error during inventory update: {db_error}", "deduction_summary": None}
+
+    finally:
+        if 'cursor' in locals():
+            cursor.close()
+        close_database_connection(connection)
