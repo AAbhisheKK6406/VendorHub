@@ -314,3 +314,87 @@ def calculate_bill_total(sale_id, vendor_id, discount_type, discount_value, tax_
         if 'cursor' in locals():
             cursor.close()
         close_database_connection(connection)
+
+def finalize_bill(sale_id, vendor_id):
+    """
+    Permanently locks a bill, transitioning its ledger state to Completed.
+    Ensures transactional safety and immutability rulesets.
+    
+    Args:
+        sale_id (int): The unique identifier of the target sale record.
+        vendor_id (int): The ID of the authenticated operating vendor.
+        
+    Returns:
+        dict: Success status, payload message, and structural bill execution summary.
+    """
+    # Input parameter validation
+    if not sale_id or not vendor_id:
+        return {"success": False, "message": "Validation Failure: Sale ID and Vendor ID are mandatory.", "bill_summary": None}
+
+    connection = get_database_connection()
+    if not connection:
+        return {"success": False, "message": "Database pipeline offline.", "bill_summary": None}
+
+    try:
+        connection.start_transaction()
+        cursor = connection.cursor(dictionary=True)
+
+        # 1. Tenancy and State Validation Check
+        bill_query = """
+            SELECT sale_id, bill_number, payment_status, total_amount 
+            FROM sales 
+            WHERE sale_id = %s AND vendor_id = %s
+        """
+        cursor.execute(bill_query, (sale_id, vendor_id))
+        bill_record = cursor.fetchone()
+
+        if not bill_record:
+            connection.rollback()
+            return {"success": False, "message": "Security Alert: Bill not found or access denied.", "bill_summary": None}
+
+        # 2. Idempotency & Immutability Guard
+        if bill_record['payment_status'] == 'Paid':
+            connection.rollback()
+            return {"success": False, "message": "Operation Blocked: This bill is already finalized and completed.", "bill_summary": None}
+
+        # 3. Empty Bill Structural Guard
+        items_check_query = "SELECT COUNT(*) as item_count FROM sale_items WHERE sale_id = %s"
+        cursor.execute(items_check_query, (sale_id,))
+        items_record = cursor.fetchone()
+        
+        if not items_record or items_record['item_count'] == 0:
+            connection.rollback()
+            return {"success": False, "message": "Validation Failure: Cannot finalize an empty bill with no line items.", "bill_summary": None}
+
+        # 4. State Modification Query
+        update_status_query = """
+            UPDATE sales 
+            SET payment_status = 'Paid' 
+            WHERE sale_id = %s AND vendor_id = %s
+        """
+        cursor.execute(update_status_query, (sale_id, vendor_id))
+        
+        # Safely commit transaction variables
+        connection.commit()
+
+        # 5. Return structured contract payload matching billing module architecture
+        return {
+            "success": True,
+            "message": f"Successfully finalized and locked Bill {bill_record['bill_number']}.",
+            "bill_summary": {
+                "sale_id": sale_id,
+                "bill_number": bill_record['bill_number'],
+                "total_amount": float(bill_record['total_amount']),
+                "payment_status": "Paid"
+            }
+        }
+
+    except Error as db_error:
+        if connection:
+            connection.rollback()
+        return {"success": False, "message": f"Database processing failure during finalization: {db_error}", "bill_summary": None}
+
+    finally:
+        if 'cursor' in locals():
+            cursor.close()
+        close_database_connection(connection)
