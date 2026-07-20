@@ -1,0 +1,107 @@
+<!-- templates/home.html -->
+{% extends "base.html" %}
+
+{% block title %}Welcome to VendorHub - Direct Vendor Sourcing Platform{% endblock %}
+
+{% block content %}
+<div class="home-wrapper">
+    <!-- Hero Section -->
+    <section class="hero-section text-center py-5 bg-white shadow-sm mb-5 rounded-4">
+        <div class="container py-4">
+            <span class="badge bg-primary-subtle text-primary mb-3 px-3 py-2 rounded-pill fw-semibold">Next-Gen Quick Commerce Infrastructure</span>
+            <h1 class="display-4 fw-bold text-dark mb-3">Welcome to <span class="text-primary">VendorHub</span></h1>
+            <p class="lead text-muted mx-auto mb-4" style="max-width: 700px;">
+                Empowering local businesses and direct vendors with lightning-fast inventory tracking, seamless customer management, and real-time analytics.
+            </p>
+            <div class="d-flex justify-content-center gap-3">
+                <a href="{{ url_for('login') if url_for else '#' }}" class="btn btn-primary px-4 py-2 fw-semibold shadow-sm">
+                    <i class="bi bi-box-arrow-in-right me-2"></i> Login
+                </a>
+                <a href="{{ url_for('register') if url_for else '#' }}" class="btn btn-outline-primary px-4 py-2 fw-semibold shadow-sm">
+                    <i class="bi bi-person-plus me-2"></i> Register Now
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section class="features-section mb-5 py-4">
+        <div class="container">
+            <div class="text-center mb-5">
+                <h2 class="fw-bold text-dark">Powerful Core Features</h2>
+                <p class="text-muted">Everything you need to run your modern supply chain efficiently.</p>
+            </div>
+            <div class="row g-4">
+                <div class="col-lg-4 col-md-6 col-12">
+                    <div class="card border-0 shadow-sm h-100 feature-card p-4">
+                        <div class="icon-box bg-primary-subtle text-primary rounded-3 mb-3 p-3 d-inline-flex">
+                            <i class="bi bi-box-seam fs-3"></i>
+                        </div>
+                        <h4 class="fw-bold text-dark h5">Smart Inventory</h4>
+                        <p class="text-muted mb-0">Track stock levels, monitor low-stock alerts, and manage product catalogs in real-time.</p>
+                    </div>
+                </div>
+                <div class="col-lg-4 col-md-6 col-12">
+                    <div class="card border-0 shadow-sm h-100 feature-card p-4">
+                        <div class="icon-box bg-success-subtle text-success rounded-3 mb-3 p-3 d-inline-flex">
+                            <i class="bi bi-receipt fs-3"></i>
+                        </div>
+                        <h4 class="fw-bold text-dark h5">Fast POS Billing</h4>
+                        <p class="text-muted mb-0">Generate digital invoices, process flexible payment methods, and manage daily sales effortlessly.</p>
+                    </div>
+                </div>
+                <div class="col-lg-4 col-md-6 col-12">
+                    <div class="card border-0 shadow-sm h-100 feature-card p-4">
+                        <div class="icon-box bg-warning-subtle text-warning rounded-3 mb-3 p-3 d-inline-flex">
+                            <i class="bi bi-graph-up-arrow fs-3"></i>
+                        </div>
+                        <h4 class="fw-bold text-dark h5">Advanced Analytics</h4>
+                        <p class="text-muted mb-0">Gain actionable business insights with comprehensive financial reports and trends.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- About Section -->
+    <section class="about-section bg-white py-5 shadow-sm rounded-4 mb-5">
+        <div class="container py-3">
+            <div class="row align-items-center g-5">
+                <div class="col-lg-6 col-12">
+                    <h2 class="fw-bold text-dark mb-3">About VendorHub</h2>
+                    <p class="text-muted mb-3">
+                        VendorHub is modeled after modern quick-commerce platforms, shifting away from slow warehouse models to direct vendor sourcing. We bridge the gap between suppliers and retail operators.
+                    </p>
+                    <p class="text-muted mb-0">
+                        Our platform ensures complete transparency, optimized order fulfillment, and robust administrative tools built for high-performance retail operations.
+                    </p>
+                </div>
+                <div class="col-lg-6 col-12">
+                    <div class="p-4 bg-light rounded-3 border">
+                        <ul class="list-unstyled mb-0 d-flex flex-column gap-3">
+                            <li class="d-flex align-items-center fw-medium text-dark"><i class="bi bi-check-circle-fill text-success me-3 fs-5"></i> Direct Vendor Integration</li>
+                            <li class="d-flex align-items-center fw-medium text-dark"><i class="bi bi-check-circle-fill text-success me-3 fs-5"></i> Secure Role-Based Authentication</li>
+                            <li class="d-flex align-items-center fw-medium text-dark"><i class="bi bi-check-circle-fill text-success me-3 fs-5"></i> Fully Responsive SaaS Interface</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Contact Section -->
+    <section class="contact-section py-4 mb-4">
+        <div class="container text-center">
+            <h2 class="fw-bold text-dark mb-3">Get in Touch</h2>
+            <p class="text-muted mb-4">Have questions or need enterprise onboarding support? Reach out to our team.</p>
+            <div class="d-inline-flex gap-4 text-secondary fw-medium">
+                <span><i class="bi bi-envelope text-primary me-2"></i> support@vendorhub.com</span>
+                <span><i class="bi bi-telephone text-primary me-2"></i> +91 (800) 555-VENDOR</span>
+            </div>
+        </div>
+    </section>
+</div>
+
+<link rel="stylesheet" href="{{ url_for('static', filename='css/home.css') }}">
+<script src="{{ url_for('static', filename='js/home.js') }}"></script>
+{% endblock %}

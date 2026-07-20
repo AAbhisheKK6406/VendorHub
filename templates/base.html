@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VendorHub - Smart SaaS Billing & Inventory</title>
+    <!-- Bootstrap 5 CSS CDN -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+    <!-- Bootstrap Icons CDN -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <!-- External Custom Base Stylesheet linked using Flask url_for -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
+    
+    <!-- Page-Specific Stylesheets Injection Block -->
+    {% block extra_css %}
+    {% endblock %}
+</head>
+<body>
+
+    <!-- Main Wrapper Structure -->
+    <div class="app-container">
+        
+        <!-- Sidebar Navigation Component -->
+        <aside class="sidebar-wrapper d-flex flex-column justify-content-between text-bg-dark" id="sidebar">
+            <div>
+                <!-- Branding Header -->
+                <div class="sidebar-brand-box d-flex align-items-center justify-content-between p-3">
+                    <span class="fs-4 fw-bold text-white"><i class="bi bi-box-seam me-2"></i>VendorHub</span>
+                    <button class="btn btn-dark d-md-none border-0" id="sidebarCloseBtn" aria-label="Close Sidebar">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
+                </div>
+                <hr class="sidebar-divider my-2 opacity-25">
+                <!-- Navigation Menu Links -->
+                <nav class="nav flex-column sidebar-nav px-2 gap-1">
+                    <a href="/dashboard" class="nav-link py-2 px-3 rounded-2 text-white" data-route="dashboard">
+                        <i class="bi bi-speedometer2 me-2"></i>Dashboard
+                    </a>
+                    <a href="/inventory" class="nav-link py-2 px-3 rounded-2 text-white" data-route="inventory">
+                        <i class="bi bi-archive me-2"></i>Inventory
+                    </a>
+                    <a href="/customer" class="nav-link py-2 px-3 rounded-2 text-white" data-route="customer">
+                        <i class="bi bi-people me-2"></i>Customers
+                    </a>
+                    <a href="/billing" class="nav-link py-2 px-3 rounded-2 text-white" data-route="billing">
+                        <i class="bi bi-receipt me-2"></i>Billing
+                    </a>
+                    <a href="/reports" class="nav-link py-2 px-3 rounded-2 text-white" data-route="reports">
+                        <i class="bi bi-graph-up-arrow me-2"></i>Reports
+                    </a>
+                </nav>
+            </div>
+            <!-- Bottom Sidebar Actions Section -->
+            <div class="px-2 pb-3">
+                <hr class="sidebar-divider my-2 opacity-25">
+                <a href="/auth/logout" class="nav-link py-2 px-3 rounded-2 text-danger logout-link">
+                    <i class="bi bi-box-arrow-right me-2"></i>Logout
+                </a>
+            </div>
+        </aside>
+
+        <!-- Main Workspace Container -->
+        <div class="workspace-wrapper flex-grow-1 d-flex flex-column">
+            
+            <!-- Global Top Navigation Bar -->
+            <header class="navbar navbar-expand bg-white border-bottom sticky-top px-3 py-2">
+                <div class="container-fluid p-0 d-flex justify-content-between align-items-center">
+                    <!-- Left Toggle Action Area -->
+                    <div class="d-flex align-items-center gap-3">
+                        <button class="btn btn-light border-0" id="sidebarToggleBtn" aria-label="Toggle Sidebar">
+                            <i class="bi bi-list fs-4"></i>
+                        </button>
+                        <h1 class="h5 m-0 text-secondary fw-semibold d-none d-sm-inline-block">
+                            <i class="bi bi-building me-2"></i><span id="navVendorName">Vendor Profile</span>
+                        </h1>
+                    </div>
+                    <!-- Right Profile Data Action Area -->
+                    <div class="d-flex align-items-center gap-3">
+                        <span class="text-muted d-none d-md-inline small fw-medium" id="navCurrentDate">July 19, 2026</span>
+                        
+                        <!-- Notification Trigger Menu -->
+                        <div class="dropdown">
+                            <button class="btn btn-light position-relative border-0 rounded-circle p-2" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="bi bi-bell fs-5"></i>
+                                <span class="position-absolute top-0 start-100 translate-middle p-1 bg-danger border border-light rounded-circle"></span>
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end shadow-sm border-0 mt-2">
+                                <li class="dropdown-header fw-bold">System Alerts</li>
+                                <li><hr class="dropdown-divider m-0"></li>
+                                <li><a class="dropdown-item py-2 small" href="#"><i class="bi bi-exclamation-triangle-fill text-warning me-2"></i>Stock balance threshold reached on items.</a></li>
+                            </ul>
+                        </div>
+
+                        <!-- User Settings Profile Dropdown Menu -->
+                        <div class="dropdown">
+                            <button class="btn btn-light d-flex align-items-center gap-2 border-0 px-3 py-2 rounded-pill" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="bi bi-person-circle fs-5 text-primary"></i>
+                                <span class="d-none d-sm-inline font-monospace small">Account</span>
+                                <i class="bi bi-chevron-down small text-muted"></i>
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end shadow-sm border-0 mt-2">
+                                <li><a class="dropdown-item py-2" href="#"><i class="bi bi-gear me-2"></i>Settings</a></li>
+                                <li><a class="dropdown-item py-2" href="#" id="darkModeToggle"><i class="bi bi-moon-stars me-2"></i>Dark Mode</a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item py-2 text-danger" href="/auth/logout"><i class="bi bi-box-arrow-right me-2"></i>Logout</a></li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Dynamic Child Sub-page View Injection Space -->
+            <main class="content-body flex-grow-1 p-4 bg-light">
+                {% block content %}
+                <!-- Child screen markup will be programmatically injected here -->
+                {% endblock %}
+            </main>
+
+            <!-- Global Master View Footer Component -->
+            <footer class="footer bg-white border-top text-center py-3 text-muted small">
+                <div class="container-fluid">
+                    <span>VendorHub &copy; 2026 | Enterprise SaaS Billing Engine Platform</span>
+                </div>
+            </footer>
+        </div>
+    </div>
+
+    <!-- Bootstrap 5 JavaScript Bundle (Includes Popper) CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+    <!-- External Custom Master Core Logic Script linked using Flask url_for -->
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    
+    <!-- Page-Specific Scripts Injection Block -->
+    {% block extra_js %}
+    {% endblock %}
+</body>
+</html>

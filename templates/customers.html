@@ -1,0 +1,194 @@
+<!-- templates/customers.html -->
+{% extends "base.html" %}
+
+{% block title %}Customer Management - VendorHub{% endblock %}
+
+{% block content %}
+<!-- Safe Compatibility Fallback -->
+{% if customer_data is not defined %}
+    {% set customer_data = {
+        "total_customers": dashboard_data.customers.total_customers if dashboard_data is defined and dashboard_data.customers is defined else 0,
+        "new_customers": 0,
+        "active_customers": 0,
+        "customer_revenue": 0,
+        "customers": []
+    } %}
+{% endif %}
+
+<div class="container-fluid py-4 customer-wrapper">
+    
+    <!-- Page Header & Action Bar -->
+    <div class="row align-items-center mb-4">
+        <div class="col-md-6 col-12">
+            <h1 class="h3 fw-bold text-dark mb-1">Customer Management</h1>
+            <p class="text-muted mb-0">Manage customer accounts, purchase history, and engagement metrics.</p>
+        </div>
+        <div class="col-md-6 col-12 text-md-end mt-3 mt-md-0">
+            <button type="button" class="btn btn-primary px-4 py-2 d-inline-flex align-items-center shadow-sm" disabled>
+                <i class="bi bi-person-plus me-2" aria-hidden="true"></i> Add Customer
+            </button>
+        </div>
+    </div>
+
+    <!-- Summary Cards Section -->
+    <div class="row g-4 mb-4">
+        <!-- 1. Total Customers -->
+        <div class="col-xl-3 col-md-6 col-12">
+            <div class="card h-100 border-0 shadow-sm metric-card">
+                <div class="card-body d-flex align-items-center p-4">
+                    <div class="icon-box bg-primary-subtle text-primary rounded-3 me-3 p-3">
+                        <i class="bi bi-people fs-4" aria-hidden="true"></i>
+                    </div>
+                    <div>
+                        <span class="text-muted small text-uppercase fw-bold d-block mb-1">Total Customers</span>
+                        <h2 class="h3 fw-bold text-dark mb-0">{{ customer_data.total_customers | default(0) }}</h2>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. New Customers -->
+        <div class="col-xl-3 col-md-6 col-12">
+            <div class="card h-100 border-0 shadow-sm metric-card">
+                <div class="card-body d-flex align-items-center p-4">
+                    <div class="icon-box bg-info-subtle text-info rounded-3 me-3 p-3">
+                        <i class="bi bi-person-plus-fill fs-4" aria-hidden="true"></i>
+                    </div>
+                    <div>
+                        <span class="text-muted small text-uppercase fw-bold d-block mb-1">New Customers</span>
+                        <h2 class="h3 fw-bold text-dark mb-0">{{ customer_data.new_customers | default(0) }}</h2>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. Active Customers -->
+        <div class="col-xl-3 col-md-6 col-12">
+            <div class="card h-100 border-0 shadow-sm metric-card">
+                <div class="card-body d-flex align-items-center p-4">
+                    <div class="icon-box bg-success-subtle text-success rounded-3 me-3 p-3">
+                        <i class="bi bi-person-check-fill fs-4" aria-hidden="true"></i>
+                    </div>
+                    <div>
+                        <span class="text-muted small text-uppercase fw-bold d-block mb-1">Active Customers</span>
+                        <h2 class="h3 fw-bold text-dark mb-0">{{ customer_data.active_customers | default(0) }}</h2>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 4. Customer Revenue -->
+        <div class="col-xl-3 col-md-6 col-12">
+            <div class="card h-100 border-0 shadow-sm metric-card">
+                <div class="card-body d-flex align-items-center p-4">
+                    <div class="icon-box bg-warning-subtle text-warning rounded-3 me-3 p-3">
+                        <i class="bi bi-currency-rupee fs-4" aria-hidden="true"></i>
+                    </div>
+                    <div>
+                        <span class="text-muted small text-uppercase fw-bold d-block mb-1">Customer Revenue</span>
+                        <h2 class="h3 fw-bold text-dark mb-0">₹{{ "{:,.2f}".format(customer_data.customer_revenue | default(0)) }}</h2>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters and Search Toolbar -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body p-3">
+            <div class="row g-3 align-items-center">
+                <!-- Search Bar -->
+                <div class="col-lg-6 col-md-6 col-12">
+                    <div class="input-group">
+                        <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search" aria-hidden="true"></i></span>
+                        <input type="text" class="form-control border-start-0 ps-0 shadow-none" placeholder="Search by customer name or ID..." id="customer-search-input">
+                    </div>
+                </div>
+                <!-- Phone Filter -->
+                <div class="col-lg-3 col-md-3 col-sm-6 col-12">
+                    <input type="text" class="form-control shadow-none" placeholder="Filter by phone..." id="phone-filter-input">
+                </div>
+                <!-- Email Filter -->
+                <div class="col-lg-3 col-md-3 col-sm-6 col-12">
+                    <input type="text" class="form-control shadow-none" placeholder="Filter by email..." id="email-filter-input">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Customers Table Section -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white border-0 py-3 d-flex justify-content-between align-items-center">
+            <h5 class="fw-bold text-dark mb-0">Customer Directory</h5>
+            <span class="badge bg-light text-muted border">Active Directory</span>
+        </div>
+        <div class="card-body px-0 pt-0 pb-2">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0" id="customer-table">
+                    <thead class="table-light text-uppercase fs-7 text-muted">
+                        <tr>
+                            <th class="ps-4">Customer ID</th>
+                            <th>Customer Name</th>
+                            <th>Phone</th>
+                            <th>Email</th>
+                            <th>Total Orders</th>
+                            <th>Total Spent</th>
+                            <th>Last Purchase</th>
+                            <th>Status</th>
+                            <th class="pe-4 text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if customer_data.customers is defined and customer_data.customers %}
+                            {% for cust in customer_data.customers %}
+                            <tr>
+                                <td class="ps-4 fw-semibold text-primary">#{{ cust.customer_id | default('N/A') }}</td>
+                                <td>
+                                    <span class="fw-semibold text-dark d-block">{{ cust.customer_name | default('Unnamed Customer') }}</span>
+                                </td>
+                                <td class="text-secondary">{{ cust.phone | default('N/A') }}</td>
+                                <td class="text-muted">{{ cust.email | default('N/A') }}</td>
+                                <td>
+                                    <span class="fw-bold text-dark">{{ cust.total_orders | default(0) }}</span>
+                                </td>
+                                <td class="fw-bold text-dark">₹{{ "{:,.2f}".format(cust.total_spent | default(0)) }}</td>
+                                <td class="text-muted small">{{ cust.last_purchase | default('Never') }}</td>
+                                <td>
+                                    {% if cust.status | default('active') == 'active' %}
+                                        <span class="badge bg-success-subtle text-success px-2 py-1">Active</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary-subtle text-secondary px-2 py-1">Inactive</span>
+                                    {% endif %}
+                                </td>
+                                <td class="pe-4 text-end">
+                                    <div class="btn-group btn-group-sm" role="group">
+                                        <button type="button" class="btn btn-outline-secondary" title="View Customer" disabled>
+                                            <i class="bi bi-eye" aria-hidden="true"></i>
+                                        </button>
+                                        <button type="button" class="btn btn-outline-primary" title="Edit Customer" disabled>
+                                            <i class="bi bi-pencil" aria-hidden="true"></i>
+                                        </button>
+                                        <button type="button" class="btn btn-outline-danger" title="Delete Customer" disabled>
+                                            <i class="bi bi-trash" aria-hidden="true"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="9" class="text-center py-4 text-muted">No customers registered yet.</td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- External CSS and JS Integration -->
+<link rel="stylesheet" href="{{ url_for('static', filename='css/customers.css') }}">
+<script src="{{ url_for('static', filename='js/customers.js') }}"></script>
+{% endblock %}

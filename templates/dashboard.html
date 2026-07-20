@@ -1,0 +1,259 @@
+<!-- templates/dashboard.html -->
+{% extends "base.html" %}
+
+{% block title %}Dashboard - VendorHub{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+
+    <!-- Flash Messages Section Start -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="row mb-4" id="flash-messages-container">
+                <div class="col-12">
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category if category != 'error' else 'danger' }} alert-dismissible fade show" role="alert">
+                            {% if category == 'success' %}
+                                <i class="fas fa-check-circle me-2" aria-hidden="true"></i>
+                            {% elif category == 'warning' %}
+                                <i class="fas fa-exclamation-triangle me-2" aria-hidden="true"></i>
+                            {% else %}
+                                <i class="fas fa-exclamation-circle me-2" aria-hidden="true"></i>
+                            {% endif %}
+                            {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+    {% endwith %}
+    <!-- Flash Messages Section End -->
+
+    <!-- TOP SECTION: Welcome & Date -->
+    <header class="row mb-4 align-items-center" id="dashboard-header">
+        <div class="col-md-8 col-12">
+            <h1 class="h2 fw-bold text-dark mb-1">Welcome back, {{ dashboard_data.vendor.name }}</h1>
+            <p class="text-muted mb-0">Manage your direct-from-vendor sourcing platform metrics and orders.</p>
+        </div>
+        <div class="col-md-4 col-12 text-md-end mt-3 mt-md-0">
+            <div class="p-2 border rounded bg-white d-inline-block shadow-sm">
+                <i class="far fa-calendar-alt text-secondary me-2" aria-hidden="true"></i>
+                <span class="text-secondary small fw-medium" id="current-date-display">July 19, 2026</span>
+            </div>
+        </div>
+    </header>
+    <!-- TOP SECTION End -->
+
+    <!-- SUMMARY CARDS SECTION (4 Cards: Total Products, Total Customers, Today's Bills, Today's Sales) -->
+    <section class="row g-3 mb-4" aria-label="Key Performance Indicators" id="kpi-cards-grid">
+        <!-- 1. Total Products -->
+        <div class="col-xl-3 col-md-6 col-sm-6 col-12">
+            <div class="card h-100 border-0 shadow-sm" id="card-total-products">
+                <div class="card-body d-flex flex-column justify-content-between p-3">
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <span class="text-muted small text-uppercase fw-bold">Total Products</span>
+                        <div class="p-2 rounded bg-light text-primary">
+                            <i class="fas fa-box fa-fw" aria-hidden="true"></i>
+                        </div>
+                    </div>
+                    <h2 class="h3 fw-bold mb-0 text-dark">{{ dashboard_data.inventory.total_products | default(0) }}</h2>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. Total Customers -->
+        <div class="col-xl-3 col-md-6 col-sm-6 col-12">
+            <div class="card h-100 border-0 shadow-sm" id="card-total-customers">
+                <div class="card-body d-flex flex-column justify-content-between p-3">
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <span class="text-muted small text-uppercase fw-bold">Total Customers</span>
+                        <div class="p-2 rounded bg-light text-success">
+                            <i class="fas fa-users fa-fw" aria-hidden="true"></i>
+                        </div>
+                    </div>
+                    <h2 class="h3 fw-bold mb-0 text-dark">{{ dashboard_data.customers.total_customers | default(0) }}</h2>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. Today's Bills -->
+        <div class="col-xl-3 col-md-6 col-sm-6 col-12">
+            <div class="card h-100 border-0 shadow-sm" id="card-total-bills">
+                <div class="card-body d-flex flex-column justify-content-between p-3">
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <span class="text-muted small text-uppercase fw-bold">Today's Bills</span>
+                        <div class="p-2 rounded bg-light text-info">
+                            <i class="fas fa-file-invoice-dollar fa-fw" aria-hidden="true"></i>
+                        </div>
+                    </div>
+                    <h2 class="h3 fw-bold mb-0 text-dark">{{ dashboard_data.billing.total_bills | default(0) }}</h2>
+                </div>
+            </div>
+        </div>
+
+        <!-- 4. Today's Sales -->
+        <div class="col-xl-3 col-md-6 col-sm-6 col-12">
+            <div class="card h-100 border-0 shadow-sm" id="card-today-sales">
+                <div class="card-body d-flex flex-column justify-content-between p-3">
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <span class="text-muted small text-uppercase fw-bold">Today's Sales</span>
+                        <div class="p-2 rounded bg-light text-warning">
+                            <i class="fas fa-calendar-day fa-fw" aria-hidden="true"></i>
+                        </div>
+                    </div>
+                    <h2 class="h3 fw-bold mb-0 text-dark">₹{{ "{:,.2f}".format(dashboard_data.billing.today_sales | default(0)) }}</h2>
+                </div>
+            </div>
+        </div>
+    </section>
+    <!-- SUMMARY CARDS SECTION End -->
+
+    <!-- SECOND SECTION: Recent Bills (Latest 5) & RIGHT SIDE: Low Stock Alerts -->
+    <div class="row g-4 mb-4" id="dashboard-workspace-split">
+        
+        <!-- SECOND SECTION: Recent Bills (Latest 5) -->
+        <section class="col-xl-8 col-12" aria-labelledby="heading-recent-bills" id="section-recent-bills">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-white border-0 py-3 d-flex justify-content-between align-items-center">
+                    <h3 class="h5 fw-bold text-dark mb-0" id="heading-recent-bills">Recent Bills</h3>
+                    <span class="badge bg-light text-muted border">Latest 5</span>
+                </div>
+                <div class="card-body p-0">
+                    {% if dashboard_data.billing.recent_bills %}
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0" aria-describedby="heading-recent-bills">
+                                <thead class="table-light text-uppercase fs-6">
+                                    <tr>
+                                        <th scope="col" class="ps-3">Bill Number</th>
+                                        <th scope="col">Customer</th>
+                                        <th scope="col">Amount</th>
+                                        <th scope="col" class="pe-3">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for bill in dashboard_data.billing.recent_bills[:5] %}
+                                        <tr>
+                                            <td class="ps-3 fw-medium text-secondary">#{{ bill.sale_id }}</td>
+                                            <td>{{ bill.customer_name }}</td>
+                                            <td class="fw-bold text-dark">₹{{ "{:,.2f}".format(bill.total_amount) }}</td>
+                                            <td class="pe-3">
+                                                {% if bill.payment_status | lower == 'paid' or bill.payment_status | lower == 'completed' %}
+                                                    <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2.5 py-1">Paid</span>
+                                                {% else %}
+                                                    <span class="badge bg-warning-subtle text-warning border border-warning-subtle rounded-pill px-2.5 py-1">Unpaid</span>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="p-4">
+                            <div class="alert alert-info d-flex align-items-center mb-0" role="alert" id="empty-state-bills">
+                                <i class="fas fa-info-circle fa-lg me-3" aria-hidden="true"></i>
+                                <div>
+                                    <h4 class="alert-heading h6 fw-bold mb-1">No execution history found</h4>
+                                    <p class="small mb-0 text-secondary">This vendor has not executed any point-of-sale customer bills yet.</p>
+                                </div>
+                            </div>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </section>
+
+        <!-- RIGHT SIDE: Low Stock Alerts (Latest 5 Products) -->
+        <div class="col-xl-4 col-12 d-flex flex-column gap-4" id="right-dashboard-sidebar">
+            <section class="card border-0 shadow-sm flex-fill" aria-labelledby="heading-low-stock" id="section-low-stock-table">
+                <div class="card-header bg-white border-0 pt-3 pb-2 d-flex justify-content-between align-items-center">
+                    <h3 class="h5 fw-bold text-dark mb-0" id="heading-low-stock">Low Stock Alerts</h3>
+                    <span class="badge bg-danger-subtle text-danger">Action Required</span>
+                </div>
+                <div class="card-body p-0">
+                    {% if dashboard_data.inventory_report_items %}
+                        <div class="table-responsive">
+                            <table class="table align-middle mb-0" aria-describedby="heading-low-stock">
+                                <thead class="table-light text-uppercase fs-6">
+                                    <tr>
+                                        <th scope="col" class="ps-3">Product</th>
+                                        <th scope="col" class="pe-3 text-end">Qty</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for item in dashboard_data.inventory_report_items[:5] %}
+                                        <tr>
+                                            <td class="ps-3">
+                                                <span class="fw-medium text-dark d-block">{{ item.product_name }}</span>
+                                                <small class="text-danger">Limit: {{ item.low_stock_limit }}</small>
+                                            </td>
+                                            <td class="pe-3 text-end">
+                                                <span class="badge bg-danger text-white border-0 rounded px-2 py-1 fw-bold">
+                                                    {{ item.current_quantity }}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="p-3">
+                            <div class="alert alert-success d-flex align-items-center mb-0" role="alert" id="empty-state-low-stock">
+                                <i class="fas fa-shield-alt text-success fa-lg me-3" aria-hidden="true"></i>
+                                <div>
+                                    <h4 class="alert-heading h6 fw-bold mb-0 text-success">Healthy Supply Chain</h4>
+                                </div>
+                            </div>
+                        </div>
+                    {% endif %}
+                </div>
+            </section>
+        </div>
+
+    </div>
+    <!-- SECOND SECTION & RIGHT SIDE End -->
+
+    <!-- BOTTOM SECTION: Quick Actions (Four professional buttons, disabled / unconnected) -->
+    <nav class="row mb-4" aria-label="Dashboard quick actions" id="quick-actions-bar">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white border-0 py-3">
+                    <h3 class="h5 fw-bold text-dark mb-0">Quick Actions</h3>
+                </div>
+                <div class="card-body p-4 pt-0">
+                    <div class="row g-3">
+                        <div class="col-xl-3 col-md-6 col-12">
+                            <button type="button" class="btn btn-outline-primary w-100 py-3 px-3 d-flex align-items-center justify-content-center fw-semibold action-btn" disabled>
+                                <i class="fas fa-plus-circle me-2 fa-lg" aria-hidden="true"></i> Add Product
+                            </button>
+                        </div>
+                        <div class="col-xl-3 col-md-6 col-12">
+                            <button type="button" class="btn btn-outline-success w-100 py-3 px-3 d-flex align-items-center justify-content-center fw-semibold action-btn" disabled>
+                                <i class="fas fa-user-plus me-2 fa-lg" aria-hidden="true"></i> Add Customer
+                            </button>
+                        </div>
+                        <div class="col-xl-3 col-md-6 col-12">
+                            <button type="button" class="btn btn-outline-warning w-100 py-3 px-3 d-flex align-items-center justify-content-center fw-semibold action-btn" disabled>
+                                <i class="fas fa-file-invoice me-2 fa-lg" aria-hidden="true"></i> Create Bill
+                            </button>
+                        </div>
+                        <div class="col-xl-3 col-md-6 col-12">
+                            <button type="button" class="btn btn-outline-info w-100 py-3 px-3 d-flex align-items-center justify-content-center fw-semibold action-btn" disabled>
+                                <i class="fas fa-chart-bar me-2 fa-lg" aria-hidden="true"></i> View Reports
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+    <!-- BOTTOM SECTION End -->
+
+</div>
+
+<!-- External CSS and JS Integration -->
+<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}

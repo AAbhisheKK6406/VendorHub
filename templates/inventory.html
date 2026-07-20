@@ -1,0 +1,215 @@
+<!-- templates/inventory.html -->
+{% extends "base.html" %}
+
+{% block title %}Inventory Management - VendorHub{% endblock %}
+
+{% block content %}
+<!-- Safe Compatibility Fallback -->
+{% if inventory_data is not defined %}
+    {% set inventory_data = {
+        "total_products": dashboard_data.inventory.total_products if dashboard_data is defined and dashboard_data.inventory is defined else 0,
+        "low_stock_count": dashboard_data.inventory.low_stock_count if dashboard_data is defined and dashboard_data.inventory is defined else 0,
+        "out_of_stock_count": 0,
+        "total_inventory_value": 0,
+        "categories": ["Groceries", "Organic", "Dairy"],
+        "products": dashboard_data.inventory_report_items if dashboard_data is defined and dashboard_data.inventory_report_items is defined else []
+    } %}
+{% endif %}
+
+<div class="container-fluid py-4 inventory-wrapper">
+    
+    <!-- Page Header & Action Bar -->
+    <div class="row align-items-center mb-4">
+        <div class="col-md-6 col-12">
+            <h1 class="h3 fw-bold text-dark mb-1">Inventory Management</h1>
+            <p class="text-muted mb-0">Monitor stock levels, categories, and product pricing.</p>
+        </div>
+        <div class="col-md-6 col-12 text-md-end mt-3 mt-md-0">
+            <button type="button" class="btn btn-primary px-4 py-2 d-inline-flex align-items-center shadow-sm" disabled>
+                <i class="fas fa-plus me-2" aria-hidden="true"></i> Add Product
+            </button>
+        </div>
+    </div>
+
+    <!-- Summary Cards Section -->
+    <div class="row g-4 mb-4">
+        <!-- 1. Total Products -->
+        <div class="col-xl-3 col-md-6 col-12">
+            <div class="card h-100 border-0 shadow-sm metric-card">
+                <div class="card-body d-flex align-items-center p-4">
+                    <div class="icon-box bg-primary-subtle text-primary rounded-3 me-3 p-3">
+                        <i class="fas fa-boxes fa-lg" aria-hidden="true"></i>
+                    </div>
+                    <div>
+                        <span class="text-muted small text-uppercase fw-bold d-block mb-1">Total Products</span>
+                        <h2 class="h3 fw-bold text-dark mb-0">{{ inventory_data.total_products | default(0) }}</h2>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. Low Stock -->
+        <div class="col-xl-3 col-md-6 col-12">
+            <div class="card h-100 border-0 shadow-sm metric-card">
+                <div class="card-body d-flex align-items-center p-4">
+                    <div class="icon-box bg-warning-subtle text-warning rounded-3 me-3 p-3">
+                        <i class="fas fa-exclamation-triangle fa-lg" aria-hidden="true"></i>
+                    </div>
+                    <div>
+                        <span class="text-muted small text-uppercase fw-bold d-block mb-1">Low Stock</span>
+                        <h2 class="h3 fw-bold text-dark mb-0">{{ inventory_data.low_stock_count | default(0) }}</h2>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. Out of Stock -->
+        <div class="col-xl-3 col-md-6 col-12">
+            <div class="card h-100 border-0 shadow-sm metric-card">
+                <div class="card-body d-flex align-items-center p-4">
+                    <div class="icon-box bg-danger-subtle text-danger rounded-3 me-3 p-3">
+                        <i class="fas fa-ban fa-lg" aria-hidden="true"></i>
+                    </div>
+                    <div>
+                        <span class="text-muted small text-uppercase fw-bold d-block mb-1">Out of Stock</span>
+                        <h2 class="h3 fw-bold text-dark mb-0">{{ inventory_data.out_of_stock_count | default(0) }}</h2>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 4. Total Inventory Value -->
+        <div class="col-xl-3 col-md-6 col-12">
+            <div class="card h-100 border-0 shadow-sm metric-card">
+                <div class="card-body d-flex align-items-center p-4">
+                    <div class="icon-box bg-success-subtle text-success rounded-3 me-3 p-3">
+                        <i class="fas fa-rupee-sign fa-lg" aria-hidden="true"></i>
+                    </div>
+                    <div>
+                        <span class="text-muted small text-uppercase fw-bold d-block mb-1">Inventory Value</span>
+                        <h2 class="h3 fw-bold text-dark mb-0">₹{{ "{:,.2f}".format(inventory_data.total_inventory_value | default(0)) }}</h2>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters and Search Toolbar -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body p-3">
+            <div class="row g-3 align-items-center">
+                <!-- Search Bar -->
+                <div class="col-lg-5 col-md-6 col-12">
+                    <div class="input-group">
+                        <span class="input-group-text bg-white border-end-0 text-muted"><i class="fas fa-search" aria-hidden="true"></i></span>
+                        <input type="text" class="form-control border-start-0 ps-0 shadow-none" placeholder="Search by product name or barcode..." id="inventory-search-input">
+                    </div>
+                </div>
+                <!-- Category Filter -->
+                <div class="col-lg-3 col-md-3 col-sm-6 col-12">
+                    <select class="form-select shadow-none" id="category-filter">
+                        <option value="" selected>All Categories</option>
+                        {% for cat in inventory_data.categories | default([]) %}
+                            <option value="{{ cat }}">{{ cat }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <!-- Stock Status Filter -->
+                <div class="col-lg-3 col-md-3 col-sm-6 col-12">
+                    <select class="form-select shadow-none" id="stock-status-filter">
+                        <option value="" selected>All Statuses</option>
+                        <option value="in_stock">In Stock</option>
+                        <option value="low_stock">Low Stock</option>
+                        <option value="out_of_stock">Out of Stock</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Products Table Section -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white border-0 py-3 d-flex justify-content-between align-items-center">
+            <h5 class="fw-bold text-dark mb-0">Product Catalog</h5>
+            <span class="badge bg-light text-muted border">Active Inventory</span>
+        </div>
+        <div class="card-body px-0 pt-0 pb-2">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0" id="inventory-table">
+                    <thead class="table-light text-uppercase fs-7 text-muted">
+                        <tr>
+                            <th class="ps-4">Product ID</th>
+                            <th>Product Name</th>
+                            <th>Category</th>
+                            <th>Purchase Price</th>
+                            <th>Selling Price</th>
+                            <th>Quantity</th>
+                            <th>Low Stock Limit</th>
+                            <th>Barcode</th>
+                            <th>Status</th>
+                            <th class="pe-4 text-end">Action Buttons</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if inventory_data.products is defined and inventory_data.products %}
+                            {% for product in inventory_data.products %}
+                            {% set prod_qty = product.quantity if product.quantity is defined else (product.current_quantity if product.current_quantity is defined else 0) %}
+                            {% set prod_limit = product.low_stock_limit if product.low_stock_limit is defined else 0 %}
+                            <tr>
+                                <td class="ps-4 fw-semibold text-primary">#{{ product.product_id | default('N/A') }}</td>
+                                <td>
+                                    <span class="fw-semibold text-dark d-block">{{ product.product_name | default('Unnamed Product') }}</span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-light text-secondary border">{{ product.category | default('General') }}</span>
+                                </td>
+                                <td class="text-secondary">₹{{ "{:,.2f}".format(product.purchase_price | default(0)) }}</td>
+                                <td class="fw-bold text-dark">₹{{ "{:,.2f}".format(product.selling_price | default(0)) }}</td>
+                                <td>
+                                    <span class="fw-bold text-dark">{{ prod_qty }}</span>
+                                </td>
+                                <td class="text-muted">{{ prod_limit }}</td>
+                                <td>
+                                    <code class="text-muted small">{{ product.barcode | default('N/A') }}</code>
+                                </td>
+                                <td>
+                                    {% if prod_qty | int == 0 %}
+                                        <span class="badge bg-danger-subtle text-danger px-2 py-1">Out of Stock</span>
+                                    {% elif prod_qty | int <= prod_limit | int %}
+                                        <span class="badge bg-warning-subtle text-warning px-2 py-1">Low Stock</span>
+                                    {% else %}
+                                        <span class="badge bg-success-subtle text-success px-2 py-1">In Stock</span>
+                                    {% endif %}
+                                </td>
+                                <td class="pe-4 text-end">
+                                    <div class="btn-group btn-group-sm" role="group">
+                                        <button type="button" class="btn btn-outline-secondary" title="View Details" disabled>
+                                            <i class="fas fa-eye" aria-hidden="true"></i>
+                                        </button>
+                                        <button type="button" class="btn btn-outline-primary" title="Edit Product" disabled>
+                                            <i class="fas fa-edit" aria-hidden="true"></i>
+                                        </button>
+                                        <button type="button" class="btn btn-outline-danger" title="Delete Product" disabled>
+                                            <i class="fas fa-trash-alt" aria-hidden="true"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="10" class="text-center py-4 text-muted">No inventory products registered yet.</td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- External CSS and JS Integration -->
+<link rel="stylesheet" href="{{ url_for('static', filename='css/inventory.css') }}">
+<script src="{{ url_for('static', filename='js/inventory.js') }}"></script>
+{% endblock %}

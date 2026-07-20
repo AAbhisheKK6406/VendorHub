@@ -1,0 +1,79 @@
+<!-- templates/register.html -->
+{% extends "base.html" %}
+
+{% block title %}Register - VendorHub{% endblock %}
+
+{% block content %}
+<div class="container py-5 auth-wrapper">
+    <div class="row justify-content-center">
+        <div class="col-md-7 col-lg-6 col-12">
+            <div class="card border-0 shadow-sm p-4 rounded-4">
+                <div class="card-body">
+                    <div class="text-center mb-4">
+                        <div class="icon-box bg-primary-subtle text-primary rounded-3 mx-auto mb-3 p-3 d-inline-flex">
+                            <i class="bi bi-person-plus fs-3"></i>
+                        </div>
+                        <h2 class="fw-bold text-dark h3">Create Account</h2>
+                        <p class="text-muted small">Register your business profile to start using VendorHub.</p>
+                    </div>
+
+                    <form id="registerForm">
+                        <div class="row g-3">
+                            <!-- Vendor Name -->
+                            <div class="col-md-6 col-12">
+                                <label for="vendorName" class="form-label small fw-bold text-muted">Vendor Name</label>
+                                <input type="text" class="form-control shadow-none" id="vendorName" placeholder="John Doe">
+                            </div>
+
+                            <!-- Business Name -->
+                            <div class="col-md-6 col-12">
+                                <label for="businessName" class="form-label small fw-bold text-muted">Business Name</label>
+                                <input type="text" class="form-control shadow-none" id="businessName" placeholder="Acme Supplies">
+                            </div>
+
+                            <!-- Email -->
+                            <div class="col-md-6 col-12">
+                                <label for="registerEmail" class="form-label small fw-bold text-muted">Email Address</label>
+                                <input type="email" class="form-control shadow-none" id="registerEmail" placeholder="name@example.com">
+                            </div>
+
+                            <!-- Phone -->
+                            <div class="col-md-6 col-12">
+                                <label for="registerPhone" class="form-label small fw-bold text-muted">Phone Number</label>
+                                <input type="text" class="form-control shadow-none" id="registerPhone" placeholder="+91 98765 43210">
+                            </div>
+
+                            <!-- Password -->
+                            <div class="col-md-6 col-12">
+                                <label for="registerPassword" class="form-label small fw-bold text-muted">Password</label>
+                                <input type="password" class="form-control shadow-none" id="registerPassword" placeholder="••••••••">
+                            </div>
+
+                            <!-- Confirm Password -->
+                            <div class="col-md-6 col-12">
+                                <label for="confirmPassword" class="form-label small fw-bold text-muted">Confirm Password</label>
+                                <input type="password" class="form-control shadow-none" id="confirmPassword" placeholder="••••••••">
+                            </div>
+                        </div>
+
+                        <!-- Register Button -->
+                        <div class="mt-4">
+                            <button type="button" class="btn btn-primary w-100 py-2 shadow-sm fw-semibold mb-3" id="registerSubmitBtn">
+                                <i class="bi bi-person-check me-2"></i> Register Account
+                            </button>
+                        </div>
+
+                        <!-- Login Redirect Link -->
+                        <div class="text-center">
+                            <p class="small text-muted mb-0">Already have an account? <a href="{{ url_for('login') if url_for else '#' }}" class="text-primary fw-semibold text-decoration-none">Login</a></p>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<link rel="stylesheet" href="{{ url_for('static', filename='css/register.css') }}">
+<script src="{{ url_for('static', filename='js/register.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,78 @@
+<!-- templates/login.html -->
+{% extends "base.html" %}
+
+{% block title %}Login - VendorHub{% endblock %}
+
+{% block content %}
+<div class="container py-5 auth-wrapper">
+    <div class="row justify-content-center">
+        <div class="col-md-6 col-lg-5 col-12">
+            <div class="card border-0 shadow-sm p-4 rounded-4">
+                <div class="card-body">
+                    <div class="text-center mb-4">
+                        <div class="icon-box bg-primary-subtle text-primary rounded-3 mx-auto mb-3 p-3 d-inline-flex">
+                            <i class="bi bi-lock fs-3"></i>
+                        </div>
+                        <h2 class="fw-bold text-dark h3">Welcome Back</h2>
+                        <p class="text-muted small">Please enter your credentials to access your account.</p>
+                    </div>
+
+                    <!-- Flash Messages Container for Bootstrap Alerts -->
+                    {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% if messages %}
+                            {% for category, message %}
+                                <div class="alert alert-{{ 'danger' if category == 'danger' else category }} alert-dismissible fade show small py-2 mb-3" role="alert">
+                                    {{ message }}
+                                    <button type="button" class="btn-close py-2" data-bs-dismiss="alert" aria-label="Close"></button>
+                                </div>
+                            {% endfor %}
+                        {% endif %}
+                    {% endwith %}
+
+                    <form id="loginForm" method="POST">
+                        <!-- Email Field -->
+                        <div class="mb-3">
+                            <label for="loginEmail" class="form-label small fw-bold text-muted">Email Address</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-envelope"></i></span>
+                                <input type="email" class="form-control border-start-0 ps-0 shadow-none" id="loginEmail" name="email" placeholder="name@example.com" required>
+                            </div>
+                        </div>
+
+                        <!-- Password Field -->
+                        <div class="mb-3">
+                            <label for="loginPassword" class="form-label small fw-bold text-muted">Password</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-key"></i></span>
+                                <input type="password" class="form-control border-start-0 ps-0 shadow-none" id="loginPassword" name="password" placeholder="••••••••" required>
+                            </div>
+                        </div>
+
+                        <!-- Remember Me & Forgot Password -->
+                        <div class="d-flex justify-content-between align-items-center mb-4">
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input shadow-none" id="rememberMe" name="remember">
+                                <label class="form-check-label small text-muted" for="rememberMe">Remember me</label>
+                            </div>
+                            <a href="#" class="small text-primary text-decoration-none fw-semibold">Forgot Password?</a>
+                        </div>
+
+                        <!-- Login Button -->
+                        <button type="submit" class="btn btn-primary w-100 py-2 shadow-sm fw-semibold mb-3" id="loginSubmitBtn">
+                            <i class="bi bi-box-arrow-in-right me-2"></i> Login
+                        </button>
+
+                        <!-- Register Redirect Link -->
+                        <div class="text-center">
+                            <p class="small text-muted mb-0">Don't have an account? <a href="{{ url_for('register') if url_for else '#' }}" class="text-primary fw-semibold text-decoration-none">Register</a></p>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<link rel="stylesheet" href="{{ url_for('static', filename='css/login.css') }}">
+<script src="{{ url_for('static', filename='js/login.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,248 @@
+<!-- templates/billing.html -->
+{% extends "base.html" %}
+
+{% block title %}Billing & Invoicing - VendorHub{% endblock %}
+
+{% block content %}
+<!-- Safe Compatibility Fallback -->
+{% if billing_data is not defined %}
+    {% set billing_data = {
+        "bill_number": "BILL-2026-0049",
+        "bill_date": "2026-07-20",
+        "customers": [{"customer_id": "1", "customer_name": "Amit Shah"}, {"customer_id": "2", "customer_name": "Riya Patel"}],
+        "products": [{"product_id": "P-001", "product_name": "Organic Tomatoes", "selling_price": 40.00}, {"product_id": "P-002", "product_name": "Fresh Milk", "selling_price": 60.00}],
+        "bill_items": [],
+        "subtotal": 0.00,
+        "discount": 0.00,
+        "tax": 0.00,
+        "grand_total": 0.00
+    } %}
+{% endif %}
+
+<div class="container-fluid py-4 billing-wrapper">
+    
+    <!-- Page Header & Action Bar -->
+    <div class="row align-items-center mb-4">
+        <div class="col-md-6 col-12">
+            <h1 class="h3 fw-bold text-dark mb-1">Billing & Invoicing</h1>
+            <p class="text-muted mb-0">Create point-of-sale invoices, manage billing items, and process checkouts.</p>
+        </div>
+        <div class="col-md-6 col-12 text-md-end mt-3 mt-md-0">
+            <span class="badge bg-light text-secondary border px-3 py-2 fw-medium">
+                <i class="bi bi-receipt me-1"></i> Active Counter
+            </span>
+        </div>
+    </div>
+
+    <!-- Main Billing Form Container -->
+    <div class="row g-4">
+        
+        <!-- Left Column: Bill Information & Product Selection -->
+        <div class="col-lg-8 col-12">
+            
+            <!-- 1. Bill Information Section -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-white border-0 py-3">
+                    <h5 class="fw-bold text-dark mb-0"><i class="bi bi-info-circle me-2 text-primary"></i>Bill Information</h5>
+                </div>
+                <div class="card-body border-top p-4">
+                    <div class="row g-3">
+                        <!-- Bill Number -->
+                        <div class="col-md-4 col-sm-6 col-12">
+                            <label for="billNumber" class="form-label small fw-bold text-muted">Bill Number</label>
+                            <input type="text" class="form-control bg-light shadow-none fw-semibold" id="billNumber" value="{{ billing_data.bill_number | default('BILL-0000') }}" readonly>
+                        </div>
+                        <!-- Bill Date -->
+                        <div class="col-md-4 col-sm-6 col-12">
+                            <label for="billDate" class="form-label small fw-bold text-muted">Bill Date</label>
+                            <input type="date" class="form-control shadow-none" id="billDate" value="{{ billing_data.bill_date | default('') }}">
+                        </div>
+                        <!-- Customer Dropdown -->
+                        <div class="col-md-4 col-12">
+                            <label for="customerSelect" class="form-label small fw-bold text-muted">Customer</label>
+                            <select class="form-select shadow-none" id="customerSelect">
+                                <option value="" selected>Select Customer...</option>
+                                {% for cust in billing_data.customers | default([]) %}
+                                    <option value="{{ cust.customer_id }}">{{ cust.customer_name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <!-- Payment Method Dropdown -->
+                        <div class="col-md-6 col-sm-6 col-12">
+                            <label for="paymentMethod" class="form-label small fw-bold text-muted">Payment Method</label>
+                            <select class="form-select shadow-none" id="paymentMethod">
+                                <option value="" selected>Select Method...</option>
+                                <option value="cash">Cash</option>
+                                <option value="upi">UPI / QR Code</option>
+                                <option value="card">Credit / Debit Card</option>
+                                <option value="credit">Store Credit</option>
+                            </select>
+                        </div>
+                        <!-- Payment Status Dropdown -->
+                        <div class="col-md-6 col-sm-6 col-12">
+                            <label for="paymentStatus" class="form-label small fw-bold text-muted">Payment Status</label>
+                            <select class="form-select shadow-none" id="paymentStatus">
+                                <option value="paid" selected>Paid</option>
+                                <option value="unpaid">Unpaid / Due</option>
+                                <option value="partial">Partial</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. Product Selection Section -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-white border-0 py-3">
+                    <h5 class="fw-bold text-dark mb-0"><i class="bi bi-cart-plus me-2 text-primary"></i>Product Selection</h5>
+                </div>
+                <div class="card-body border-top p-4">
+                    <div class="row g-3 align-items-end">
+                        <!-- Search Product -->
+                        <div class="col-md-4 col-12">
+                            <label for="productSearch" class="form-label small fw-bold text-muted">Search Product</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search" aria-hidden="true"></i></span>
+                                <input type="text" class="form-control border-start-0 ps-0 shadow-none" placeholder="Type to filter..." id="productSearch">
+                            </div>
+                        </div>
+                        <!-- Product Dropdown -->
+                        <div class="col-md-4 col-12">
+                            <label for="productSelect" class="form-label small fw-bold text-muted">Select Product</label>
+                            <select class="form-select shadow-none" id="productSelect">
+                                <option value="" selected>Choose product...</option>
+                                {% for prod in billing_data.products | default([]) %}
+                                    <option value="{{ prod.product_id }}" data-price="{{ prod.selling_price }}">{{ prod.product_name }} (₹{{ prod.selling_price }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <!-- Quantity Input -->
+                        <div class="col-md-2 col-6">
+                            <label for="productQuantity" class="form-label small fw-bold text-muted">Quantity</label>
+                            <input type="number" class="form-control shadow-none" id="productQuantity" value="1" min="1">
+                        </div>
+                        <!-- Add Product Button -->
+                        <div class="col-md-2 col-6">
+                            <button type="button" class="btn btn-primary w-100 shadow-sm" id="addProductBtn" disabled>
+                                <i class="bi bi-plus-lg me-1"></i> Add
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3. Billing Table Section -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-white border-0 py-3 d-flex justify-content-between align-items-center">
+                    <h5 class="fw-bold text-dark mb-0"><i class="bi bi-list-check me-2 text-primary"></i>Invoice Line Items</h5>
+                    <span class="badge bg-light text-muted border">Cart Summary</span>
+                </div>
+                <div class="card-body px-0 pt-0 pb-2">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0" id="billingTable">
+                            <thead class="table-light text-uppercase fs-7 text-muted">
+                                <tr>
+                                    <th class="ps-4">Product</th>
+                                    <th>Quantity</th>
+                                    <th>Selling Price</th>
+                                    <th>Line Total</th>
+                                    <th class="pe-4 text-end">Remove</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% if billing_data.bill_items is defined and billing_data.bill_items %}
+                                    {% for item in billing_data.bill_items %}
+                                    <tr>
+                                        <td class="ps-4 fw-semibold text-dark">{{ item.product_name | default('Unnamed Product') }}</td>
+                                        <td>{{ item.quantity | default(1) }}</td>
+                                        <td class="text-secondary">₹{{ "{:,.2f}".format(item.selling_price | default(0)) }}</td>
+                                        <td class="fw-bold text-dark">₹{{ "{:,.2f}".format(item.line_total | default(0)) }}</td>
+                                        <td class="pe-4 text-end">
+                                            <button type="button" class="btn btn-outline-danger btn-sm" disabled title="Remove Item">
+                                                <i class="bi bi-trash" aria-hidden="true"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                {% else %}
+                                    <tr>
+                                        <td colspan="5" class="text-center py-4 text-muted">No items added to billing cart yet. Use product selection above.</td>
+                                    </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Right Column: Bill Summary & Action Controls -->
+        <div class="col-lg-4 col-12">
+            
+            <!-- 4. Bill Summary Card -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-white border-0 py-3">
+                    <h5 class="fw-bold text-dark mb-0"><i class="bi bi-calculator me-2 text-primary"></i>Bill Summary</h5>
+                </div>
+                <div class="card-body border-top p-4">
+                    <ul class="list-unstyled mb-0 d-flex flex-column gap-3">
+                        <li class="d-flex justify-content-between align-items-center">
+                            <span class="text-muted">Subtotal:</span>
+                            <span class="fw-semibold text-dark" id="summarySubtotal">₹{{ "{:,.2f}".format(billing_data.subtotal | default(0)) }}</span>
+                        </li>
+                        <li class="d-flex justify-content-between align-items-center">
+                            <span class="text-muted">Discount Type:</span>
+                            <select class="form-select form-select-sm w-auto shadow-none" id="discountType">
+                                <option value="flat" selected>Flat (₹)</option>
+                                <option value="percent">Percentage (%)</option>
+                            </select>
+                        </li>
+                        <li class="d-flex justify-content-between align-items-center">
+                            <span class="text-muted">Discount:</span>
+                            <input type="number" class="form-control form-control-sm w-50 text-end shadow-none" id="discountValue" value="{{ billing_data.discount | default(0) }}" min="0">
+                        </li>
+                        <li class="d-flex justify-content-between align-items-center">
+                            <span class="text-muted">Tax (GST):</span>
+                            <span class="fw-semibold text-secondary" id="summaryTax">₹{{ "{:,.2f}".format(billing_data.tax | default(0)) }}</span>
+                        </li>
+                        <li><hr class="dropdown-divider my-1"></li>
+                        <li class="d-flex justify-content-between align-items-center">
+                            <span class="fw-bold text-dark fs-5">Grand Total:</span>
+                            <span class="fw-bold text-primary fs-4" id="summaryGrandTotal">₹{{ "{:,.2f}".format(billing_data.grand_total | default(0)) }}</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- 5. Action Buttons Card -->
+            <div class="card border-0 shadow-sm">
+                <div class="card-body p-4 d-flex flex-column gap-2">
+                    <button type="button" class="btn btn-outline-secondary w-100 py-2 shadow-sm" id="calculateTotalBtn" disabled>
+                        <i class="bi bi-arrow-clockwise me-2"></i> Calculate Total
+                    </button>
+                    <button type="button" class="btn btn-outline-primary w-100 py-2 shadow-sm" id="saveDraftBtn" disabled>
+                        <i class="bi bi-save me-2"></i> Save Draft
+                    </button>
+                    <button type="button" class="btn btn-success w-100 py-2 shadow-sm fw-semibold" id="finalizeBillBtn" disabled>
+                        <i class="bi bi-check-circle me-2"></i> Finalize Bill
+                    </button>
+                    <button type="button" class="btn btn-dark w-100 py-2 shadow-sm" id="generateInvoiceBtn" disabled>
+                        <i class="bi bi-file-earmark-pdf me-2"></i> Generate Invoice
+                    </button>
+                    <button type="button" class="btn btn-light text-danger w-100 py-2 border-0 mt-2" id="cancelBillingBtn" disabled>
+                        <i class="bi bi-x-circle me-2"></i> Cancel
+                    </button>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+<!-- External CSS and JS Integration -->
+<link rel="stylesheet" href="{{ url_for('static', filename='css/billing.css') }}">
+<script src="{{ url_for('static', filename='js/billing.js') }}"></script>
+{% endblock %}
