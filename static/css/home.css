@@ -1,0 +1,26 @@
+/* static/css/home.css */
+.home-wrapper {
+    background-color: #f8f9fa;
+}
+
+.hero-section {
+    background: linear-gradient(135deg, #ffffff 0%, #f1f3f5 100%);
+    border: 1px solid #dee2e6;
+}
+
+.feature-card {
+    transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+
+.feature-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 .5rem 1rem rgba(0, 0, 0, .08) !important;
+}
+
+.icon-box {
+    width: 56px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}

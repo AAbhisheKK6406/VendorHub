@@ -399,3 +399,45 @@ def low_stock_alert(vendor_id):
         if 'cursor' in locals():
             cursor.close()
         close_database_connection(connection)
+
+def get_inventory_dashboard_metrics(vendor_id):
+    """
+    Fetches high-level metadata counters for a vendor's inventory footprint.
+    
+    Args:
+        vendor_id (int): Unique database identifier of the target vendor.
+        
+    Returns:
+        dict: Operational status status flag along with the count metrics payload.
+    """
+    if not vendor_id:
+        return {"success": False, "message": "Validation Failure: Vendor ID is required.", "data": None}
+
+    connection = get_database_connection()
+    if not connection:
+        return {"success": False, "message": "Database pipeline offline.", "data": None}
+
+    try:
+        cursor = connection.cursor(dictionary=True)
+
+        query = """
+            SELECT COUNT(product_id) as total_products 
+            FROM products 
+            WHERE vendor_id = %s
+        """
+        cursor.execute(query, (vendor_id,))
+        result = cursor.fetchone()
+
+        return {
+            "success": True,
+            "message": "Inventory dashboard metrics fetched successfully.",
+            "data": {
+                "total_products": int(result["total_products"]) if result else 0
+            }
+        }
+    except Error as db_error:
+        return {"success": False, "message": f"Database error in inventory helper: {db_error}", "data": None}
+    finally:
+        if 'cursor' in locals() and cursor:
+            cursor.close()
+        close_database_connection(connection)

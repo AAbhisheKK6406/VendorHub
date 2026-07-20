@@ -1,17 +1,11 @@
+from datetime import datetime
 from mysql.connector import Error
 from database.db import get_database_connection, close_database_connection
-from datetime import datetime, timedelta
 
 def generate_sales_summary(vendor_id):
     """
     Aggregates point-of-sale metrics to generate a high-level 
     financial health summary for a specific vendor.
-    
-    Args:
-        vendor_id (int): The unique database identifier of the target vendor.
-        
-    Returns:
-        dict: Operational status flag along with the structured report payload.
     """
     if not vendor_id:
         return {"success": False, "message": "Validation Failure: Vendor ID is required.", "report_data": None}
@@ -30,7 +24,6 @@ def generate_sales_summary(vendor_id):
             return {"success": False, "message": "Access Denied: Vendor profile not found.", "report_data": None}
 
         # 2. Compute Aggregated Operational Header Metrics
-        # Treats Paid or Completed sales as valid revenue contributors
         metrics_query = """
             SELECT 
                 COUNT(sale_id) as total_sales,
@@ -46,7 +39,7 @@ def generate_sales_summary(vendor_id):
             SELECT COALESCE(SUM(si.quantity), 0) as total_units
             FROM sale_items si
             JOIN sales s ON si.sale_id = s.sale_id
-            WHERE s.vendor_id = %s
+            WHERE s.vendor_id = %s AND s.payment_status IN ('Paid', 'Completed', 'Unpaid')
         """
         cursor.execute(products_sold_query, (vendor_id,))
         items_metrics = cursor.fetchone()
@@ -56,7 +49,6 @@ def generate_sales_summary(vendor_id):
         total_revenue = float(summary_metrics["total_revenue"])
         total_products_sold = int(items_metrics["total_units"])
         
-        # Calculate Average Bill Value safely to prevent DivisionByZero exceptions
         average_bill_value = float(total_revenue / total_sales) if total_sales > 0 else 0.0
 
         # 5. Build Structured Summary Contract Payload
@@ -85,20 +77,11 @@ def generate_sales_summary(vendor_id):
         close_database_connection(connection)
 
 
-
 def generate_sales_report(vendor_id, report_type):
     """
     Generates a filtered financial performance report over a designated 
     time window (daily, weekly, monthly) for an explicit vendor.
-    
-    Args:
-        vendor_id (int): The unique database identifier of the target vendor.
-        report_type (str): The time interval frame ('daily', 'weekly', 'monthly').
-        
-    Returns:
-        dict: Operational status status flag alongside the structured report data.
     """
-    # 1. Input Sanitization and Validations
     if not vendor_id:
         return {"success": False, "message": "Validation Failure: Vendor ID is required.", "report_data": None}
         
@@ -113,41 +96,50 @@ def generate_sales_report(vendor_id, report_type):
         cursor = connection.cursor(dictionary=True)
         report_type = report_type.lower()
 
-        # 2. Verify Vendor Profile Existence Boundary
+        # 1. Verify Vendor Profile Existence Boundary
         vendor_check_query = "SELECT id FROM vendors WHERE id = %s"
         cursor.execute(vendor_check_query, (vendor_id,))
         if not cursor.fetchone():
             return {"success": False, "message": "Access Denied: Vendor profile not found.", "report_data": None}
 
-        # 3. Formulate SQL Interval Mappings Dynamically
+        # 2. Formulate SQL Interval Mappings Dynamically
         if report_type == 'daily':
-            date_filter = "s.sale_date >= DATE_SUB(NOW(), INTERVAL 1 DAY)"
+            date_filter = "sale_date >= DATE_SUB(NOW(), INTERVAL 1 DAY)"
         elif report_type == 'weekly':
-            date_filter = "s.sale_date >= DATE_SUB(NOW(), INTERVAL 7 DAY)"
+            date_filter = "sale_date >= DATE_SUB(NOW(), INTERVAL 7 DAY)"
         else:  # monthly
-            date_filter = "s.sale_date >= DATE_SUB(NOW(), INTERVAL 30 DAY)"
+            date_filter = "sale_date >= DATE_SUB(NOW(), INTERVAL 30 DAY)"
 
-        # 4. Compute Financial Metrics inside Time Window using a single optimized pass
-        metrics_query = f"""
+        # 3. Fetch Base Sales Numbers (Separated to protect total_revenue from Join multiplier expansion)
+        sales_query = f"""
             SELECT 
-                COUNT(DISTINCT s.sale_id) as total_bills,
-                COALESCE(SUM(s.total_amount), 0.0) as total_revenue,
-                COALESCE(SUM(si.quantity), 0) as total_products
-            FROM sales s
-            LEFT JOIN sale_items si ON s.sale_id = si.sale_id
-            WHERE s.vendor_id = %s 
-              AND s.payment_status IN ('Paid', 'Completed', 'Unpaid')
+                COUNT(sale_id) as total_bills,
+                COALESCE(SUM(total_amount), 0.0) as total_revenue
+            FROM sales
+            WHERE vendor_id = %s 
+              AND payment_status IN ('Paid', 'Completed', 'Unpaid')
               AND {date_filter}
         """
-        cursor.execute(metrics_query, (vendor_id,))
-        report_metrics = cursor.fetchone()
+        cursor.execute(sales_query, (vendor_id,))
+        sales_metrics = cursor.fetchone()
+
+        # 4. Fetch Total Product Counts for target timeline
+        items_query = f"""
+            SELECT COALESCE(SUM(si.quantity), 0) as total_products
+            FROM sale_items si
+            JOIN sales s ON si.sale_id = s.sale_id
+            WHERE s.vendor_id = %s 
+              AND s.payment_status IN ('Paid', 'Completed', 'Unpaid')
+              AND s.{date_filter}
+        """
+        cursor.execute(items_query, (vendor_id,))
+        items_metrics = cursor.fetchone()
 
         # 5. Extract Metrics and Cast to Safe Types
-        total_bills = int(report_metrics["total_bills"])
-        total_revenue = float(report_metrics["total_revenue"])
-        total_products_sold = int(report_metrics["total_products"])
+        total_bills = int(sales_metrics["total_bills"])
+        total_revenue = float(sales_metrics["total_revenue"])
+        total_products_sold = int(items_metrics["total_products"])
         
-        # ZeroDivision safety fallback rule logic checking
         average_bill_value = float(total_revenue / total_bills) if total_bills > 0 else 0.0
 
         # 6. Build Standard Report Contract Structure
@@ -177,22 +169,12 @@ def generate_sales_report(vendor_id, report_type):
             cursor.close()
         close_database_connection(connection)
 
-from mysql.connector import Error
-from database.db import get_database_connection, close_database_connection
 
 def generate_top_selling_products(vendor_id, limit=10):
     """
     Identifies and aggregates performance data for a vendor's highest-velocity
     products based on historical finalized sales records.
-    
-    Args:
-        vendor_id (int): The unique database identifier of the target vendor.
-        limit (int): The maximum number of product records to return. Defaults to 10.
-        
-    Returns:
-        dict: Standard operational success status alongside the structured report data payload.
     """
-    # 1. Input Validation Threshold Check
     if not vendor_id:
         return {"success": False, "message": "Validation Failure: Vendor ID is required.", "report_data": None}
         
@@ -210,13 +192,13 @@ def generate_top_selling_products(vendor_id, limit=10):
     try:
         cursor = connection.cursor(dictionary=True)
 
-        # 2. Verify Vendor Profile Existence Boundary
+        # 1. Verify Vendor Profile Existence Boundary
         vendor_check_query = "SELECT id FROM vendors WHERE id = %s"
         cursor.execute(vendor_check_query, (vendor_id,))
         if not cursor.fetchone():
             return {"success": False, "message": "Access Denied: Vendor profile not found.", "report_data": None}
 
-        # 3. Compile Aggregated Top Products using a Multi-Table Relational Join
+        # 2. Compile Aggregated Top Products using a Multi-Table Relational Join
         top_products_query = """
             SELECT 
                 si.product_id,
@@ -235,7 +217,7 @@ def generate_top_selling_products(vendor_id, limit=10):
         cursor.execute(top_products_query, (vendor_id, limit))
         product_records = cursor.fetchall()
 
-        # 4. Standardize and Format Result Records
+        # 3. Standardize and Format Result Records
         formatted_products = []
         for row in product_records:
             formatted_products.append({
@@ -245,7 +227,7 @@ def generate_top_selling_products(vendor_id, limit=10):
                 "total_revenue_generated": round(float(row["total_revenue_generated"]), 2)
             })
 
-        # 5. Build Final Standardized Report Contract Payload
+        # 4. Build Final Standardized Report Contract Payload
         report_payload = {
             "vendor_id": vendor_id,
             "items_returned_count": len(formatted_products),
@@ -266,21 +248,12 @@ def generate_top_selling_products(vendor_id, limit=10):
             cursor.close()
         close_database_connection(connection)
 
-from mysql.connector import Error
-from database.db import get_database_connection, close_database_connection
 
 def generate_low_stock_report(vendor_id):
     """
     Identifies and profiles inventory products that have depleted below or equal
     to their designated low stock threshold limits.
-    
-    Args:
-        vendor_id (int): The unique database identifier of the target vendor.
-        
-    Returns:
-        dict: Operational success status alongside the structured report payload.
     """
-    # 1. Input Sanitization
     if not vendor_id:
         return {"success": False, "message": "Validation Failure: Vendor ID is required.", "report_data": None}
 
@@ -291,14 +264,13 @@ def generate_low_stock_report(vendor_id):
     try:
         cursor = connection.cursor(dictionary=True)
 
-        # 2. Verify Vendor Profile Existence Boundary
+        # 1. Verify Vendor Profile Existence Boundary
         vendor_check_query = "SELECT id FROM vendors WHERE id = %s"
         cursor.execute(vendor_check_query, (vendor_id,))
         if not cursor.fetchone():
             return {"success": False, "message": "Access Denied: Vendor profile not found.", "report_data": None}
 
-        # 3. Fetch Low Stock Records
-        # Compares current quantity against the specific low_stock_limit condition
+        # 2. Fetch Low Stock Records
         low_stock_query = """
             SELECT 
                 product_id,
@@ -315,7 +287,7 @@ def generate_low_stock_report(vendor_id):
         cursor.execute(low_stock_query, (vendor_id,))
         product_records = cursor.fetchall()
 
-        # 4. Format and Standardize Payload Primitive Types
+        # 3. Format and Standardize Payload Primitive Types
         formatted_report_list = []
         for row in product_records:
             formatted_report_list.append({
@@ -327,7 +299,7 @@ def generate_low_stock_report(vendor_id):
                 "selling_price": round(float(row["selling_price"]), 2)
             })
 
-        # 5. Build Unified Result Payload Contract Struct
+        # 4. Build Unified Result Payload Contract Struct
         report_payload = {
             "vendor_id": vendor_id,
             "low_stock_items_count": len(formatted_report_list),
@@ -348,21 +320,12 @@ def generate_low_stock_report(vendor_id):
             cursor.close()
         close_database_connection(connection)
 
-from mysql.connector import Error
-from database.db import get_database_connection, close_database_connection
 
 def generate_customer_purchase_report(vendor_id):
     """
     Compiles behavioral sales metrics for each customer interacting with 
     the targeted vendor, calculating spending power, volumes, and timelines.
-    
-    Args:
-        vendor_id (int): The unique database identifier of the target vendor.
-        
-    Returns:
-        dict: Operational validation status flag along with the structured report payload.
     """
-    # 1. Input Sanitization Check
     if not vendor_id:
         return {"success": False, "message": "Validation Failure: Vendor ID is required.", "report_data": None}
 
@@ -373,14 +336,13 @@ def generate_customer_purchase_report(vendor_id):
     try:
         cursor = connection.cursor(dictionary=True)
 
-        # 2. Verify Vendor Profile Existence Boundary
+        # 1. Verify Vendor Profile Existence Boundary
         vendor_check_query = "SELECT id FROM vendors WHERE id = %s"
         cursor.execute(vendor_check_query, (vendor_id,))
         if not cursor.fetchone():
             return {"success": False, "message": "Access Denied: Vendor profile not found.", "report_data": None}
 
-        # 3. Aggregate Customer Transactional Profiles via Multi-Table Relational Join
-        # Handles missing customer profile labels safely by checking customer_id fallbacks
+        # 2. Aggregate Customer Transactional Profiles via Multi-Table Relational Join
         customer_report_query = """
             SELECT 
                 s.customer_id,
@@ -400,17 +362,16 @@ def generate_customer_purchase_report(vendor_id):
         cursor.execute(customer_report_query, (vendor_id,))
         customer_records = cursor.fetchall()
 
-        # 4. Normalize and Format Payload Primitive Structures
+        # 3. Normalize and Format Payload Primitive Structures
         formatted_customer_list = []
         for row in customer_records:
             total_orders = int(row["total_orders"])
             total_spent = float(row["total_spent"])
             
-            # ZeroDivision safety fallback rule logic checking
             average_order_value = float(total_spent / total_orders) if total_orders > 0 else 0.0
 
             formatted_customer_list.append({
-                "customer_id": int(row["customer_id"]),
+                "customer_id": int(row["customer_id"]) if row["customer_id"] else 0,
                 "customer_name": row["customer_name"],
                 "total_orders": total_orders,
                 "total_amount_spent": round(total_spent, 2),
@@ -419,7 +380,7 @@ def generate_customer_purchase_report(vendor_id):
                 "last_purchase_date": row["last_purchase_date"].strftime("%Y-%m-%d %H:%M:%S") if row["last_purchase_date"] else "N/A"
             })
 
-        # 5. Build Unified Result Payload Contract Struct
+        # 4. Build Unified Result Payload Contract Struct
         report_payload = {
             "vendor_id": vendor_id,
             "tracked_customers_count": len(formatted_customer_list),

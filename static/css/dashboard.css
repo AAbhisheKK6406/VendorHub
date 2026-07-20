@@ -1,0 +1,282 @@
+/* ==========================================================================
+   VendorHub - Enterprise SaaS Dashboard Stylesheet
+   Project Name: VendorHub
+   Design System: Minimal, Clean, High-Contrast Professional Admin (Stripe/Shopify Style)
+   ========================================================================== */
+
+/* --- Root & Global Variables --- */
+:root {
+    --vh-primary: #635bff;       /* Stripe-inspired deep violet */
+    --vh-primary-hover: #564fdb;
+    --vh-primary-light: #f0efff;
+    --vh-secondary: #697386;     /* Slate text secondary */
+    --vh-dark: #1a1f36;          /* Deep slate charcoal for primary headers */
+    --vh-bg: #f7f8f9;            /* Light neutral dashboard surface */
+    --vh-card-bg: #ffffff;
+    --vh-border-color: #e3e8ee;
+    --vh-shadow-sm: 0 2px 5px rgba(26, 31, 54, 0.03), 0 1px 2px rgba(0, 0, 0, 0.04);
+    --vh-shadow-md: 0 7px 14px rgba(60, 66, 87, 0.08), 0 3px 6px rgba(0, 0, 0, 0.06);
+    --vh-font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --vh-radius: 8px;
+    --vh-transition: all 0.2s ease-in-out;
+}
+
+/* --- Bootstrap Structural Reset Overrides --- */
+body {
+    background-color: var(--vh-bg);
+    font-family: var(--vh-font-sans);
+    color: #3c4257;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* --- 1. Dashboard Container --- */
+.container-fluid {
+    max-width: 1600px;
+    padding-left: 2rem !important;
+    padding-right: 2rem !important;
+}
+
+/* --- 2. Welcome Section --- */
+#dashboard-header h1 {
+    color: var(--vh-dark);
+    letter-spacing: -0.025em;
+}
+
+#dashboard-header p {
+    color: var(--vh-secondary);
+    font-size: 0.95rem;
+}
+
+#current-date-display {
+    color: var(--vh-secondary) !important;
+    letter-spacing: 0.02em;
+}
+
+#dashboard-header .bg-white {
+    border: 1px solid var(--vh-border-color) !important;
+    border-radius: var(--vh-radius) !important;
+    transition: var(--vh-transition);
+}
+
+#dashboard-header .bg-white:hover {
+    border-color: #a3acb9;
+}
+
+/* --- 3. Quick Action Buttons --- */
+#quick-actions-bar .card {
+    border: 1px solid var(--vh-border-color) !important;
+    border-radius: var(--vh-radius) !important;
+}
+
+#quick-actions-bar .btn {
+    font-weight: 500;
+    font-size: 0.875rem;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    transition: var(--vh-transition);
+}
+
+#action-add-product {
+    background-color: var(--vh-primary) !important;
+    border-color: var(--vh-primary) !important;
+    color: #ffffff !important;
+}
+
+#action-add-product:hover,
+#action-add-product:focus {
+    background-color: var(--vh-primary-hover) !important;
+    border-color: var(--vh-primary-hover) !important;
+    box-shadow: 0 0 0 3px rgba(99, 91, 255, 0.3) !important;
+}
+
+#quick-actions-bar .btn-outline-secondary {
+    color: var(--vh-secondary) !important;
+    border-color: var(--vh-border-color) !important;
+    background-color: #ffffff;
+}
+
+#quick-actions-bar .btn-outline-secondary:hover,
+#quick-actions-bar .btn-outline-secondary:focus {
+    color: var(--vh-dark) !important;
+    border-color: #a3acb9 !important;
+    background-color: var(--vh-bg) !important;
+    box-shadow: 0 0 0 3px rgba(105, 115, 134, 0.15) !important;
+}
+
+/* --- 4. Statistics Cards --- */
+#kpi-cards-grid .card {
+    border: 1px solid var(--vh-border-color) !important;
+    border-radius: var(--vh-radius) !important;
+    background-color: var(--vh-card-bg);
+    transition: transform 0.22s cubic-bezier(0.2, 1, 0.2, 1), box-shadow 0.22s cubic-bezier(0.2, 1, 0.2, 1);
+    will-change: transform, box-shadow;
+}
+
+/* Elegant micro-lift micro-interaction */
+#kpi-cards-grid .card:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--vh-shadow-md) !important;
+    border-color: #c1c9d2 !important;
+}
+
+#kpi-cards-grid .text-uppercase {
+    font-size: 0.75rem !important;
+    letter-spacing: 0.05em;
+    color: var(--vh-secondary) !important;
+}
+
+#kpi-cards-grid h2 {
+    color: var(--vh-dark) !important;
+    font-size: 1.65rem;
+    letter-spacing: -0.02em;
+    margin-top: 0.5rem;
+}
+
+/* KPI Context Icon Colors */
+#card-total-products .bg-light { background-color: var(--vh-primary-light) !important; color: var(--vh-primary) !important; }
+#card-low-stock .bg-light { background-color: #fff0f0 !important; color: #df1b1b !important; }
+#card-total-customers .bg-light { background-color: #eafbf1 !important; color: #00875a !important; }
+#card-total-bills .bg-light { background-color: #e6f6ff !important; color: #0077c5 !important; }
+#card-today-sales .bg-light { background-color: #fff9e6 !important; color: #b76e00 !important; }
+#card-monthly-revenue .bg-light { background-color: #f3f3f4 !important; color: var(--vh-dark) !important; }
+
+/* --- 5. Tables & Workspaces --- */
+#dashboard-workspace-split .card {
+    border: 1px solid var(--vh-border-color) !important;
+    border-radius: var(--vh-radius) !important;
+    overflow: hidden;
+}
+
+#dashboard-workspace-split .card-header {
+    border-bottom: 1px solid var(--vh-border-color) !important;
+    padding-left: 1.25rem;
+    padding-right: 1.25rem;
+}
+
+#dashboard-workspace-split .card-header h3 {
+    color: var(--vh-dark) !important;
+    font-size: 1.05rem;
+    letter-spacing: -0.01em;
+}
+
+/* Corporate Table Presentation */
+.table {
+    margin-bottom: 0;
+}
+
+.table thead th {
+    font-size: 0.72rem !important;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    color: var(--vh-secondary);
+    background-color: #f8f9fa;
+    border-bottom: 1px solid var(--vh-border-color) !important;
+    padding-top: 0.75rem;
+    padding-bottom: 0.75rem;
+}
+
+.table tbody td {
+    padding-top: 0.85rem;
+    padding-bottom: 0.85rem;
+    font-size: 0.875rem;
+    border-bottom: 1px solid var(--vh-border-color);
+    color: #4f566b;
+    transition: background-color 0.15s ease;
+}
+
+.table-hover tbody tr:hover td {
+    background-color: #f8fafc !important;
+    color: var(--vh-dark);
+}
+
+/* Custom Status Pill Badge Refinements */
+.badge {
+    font-weight: 500;
+    font-size: 0.75rem;
+    letter-spacing: 0.01em;
+}
+.bg-success-subtle { background-color: #e2f6ec !important; color: #00704a !important; }
+.bg-warning-subtle { background-color: #fff3cd !important; color: #856404 !important; }
+
+/* Empty States */
+.alert-info {
+    background-color: #ffffff !important;
+    border: 1px dashed #ced4da !important;
+    color: var(--vh-secondary) !important;
+    border-radius: var(--vh-radius);
+}
+
+/* --- 6. Flash Messages --- */
+#flash-messages-container .alert {
+    border-radius: var(--vh-radius);
+    font-size: 0.9rem;
+    box-shadow: var(--vh-shadow-sm);
+    border: 1px solid transparent;
+}
+.alert-success { background-color: #e2f6ec; border-color: #a3e6c4; color: #004d33; }
+.alert-danger { background-color: #fde8e8; border-color: #f8b4b4; color: #9b1c1c; }
+.alert-warning { background-color: #fef3c7; border-color: #fde68a; color: #92400e; }
+
+/* ==========================================================================
+   7. Media Queries & Responsive Design Overrides
+   ========================================================================== */
+
+/* --- Desktop & Laptop Optimization (Default/Up to 1400px) --- */
+@media (max-width: 1400px) {
+    #kpi-cards-grid .col-xl-2 {
+        flex: 0 0 33.333333%;
+        max-width: 33.333333%;
+    }
+}
+
+/* --- Tablet Support (Below 992px) --- */
+@media (max-width: 991.98px) {
+    .container-fluid {
+        padding-left: 1.25rem !important;
+        padding-right: 1.25rem !important;
+    }
+    
+    #kpi-cards-grid .col-xl-2 {
+        flex: 0 0 50%;
+        max-width: 50%;
+    }
+
+    #dashboard-workspace-split {
+        flex-direction: column;
+    }
+
+    #right-dashboard-sidebar {
+        width: 100%;
+    }
+}
+
+/* --- Mobile Support (Below 576px) --- */
+@media (max-width: 575.98px) {
+    .container-fluid {
+        padding-left: 0.75rem !important;
+        padding-right: 0.75rem !important;
+    }
+
+    #dashboard-header {
+        text-align: left;
+    }
+    
+    #dashboard-header .text-md-end {
+        text-align: left !important;
+    }
+
+    #kpi-cards-grid .col-xl-2 {
+        flex: 0 0 100%;
+        max-width: 100%;
+    }
+
+    #quick-actions-bar .d-flex {
+        flex-direction: column;
+        align-items: stretch !important;
+    }
+
+    #quick-actions-bar .btn {
+        width: 100%;
+        justify-content: center;
+    }
+}

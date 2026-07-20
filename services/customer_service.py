@@ -6,21 +6,17 @@ def add_customer(vendor_id, name, phone, email=None, address=None):
     """
     Validates and registers a new customer under a specific vendor's account.
     Prevents duplicate phone numbers for the same vendor.
-    
-    Returns:
-        dict: Success status and feedback message.
     """
-    # 1. Basic validation of mandatory fields
     if not vendor_id or not name or not phone:
         return {"success": False, "message": "Missing required fields: Vendor ID, Name, and Phone are mandatory."}
 
-    # Clean the name and phone strings
+    # Clean the name and phone strings safely
     name = name.strip()
     phone = phone.strip()
-    email = email.strip() if email else None
-    address = address.strip() if address else None
+    email = email.strip().lower() if email and email.strip() else None
+    address = address.strip() if address and address.strip() else None
 
-    # 2. Indian Phone Number Validation (Must be exactly 10 numeric digits)
+    # Indian Phone Number Validation (Exactly 10 digits)
     if not phone.isdigit() or len(phone) != 10:
         return {"success": False, "message": "Validation Failure: Phone number must contain exactly 10 numeric digits."}
 
@@ -31,49 +27,40 @@ def add_customer(vendor_id, name, phone, email=None, address=None):
     try:
         cursor = connection.cursor(dictionary=True)
 
-        # 3. Check if vendor exists before continuing
+        # Confirm vendor validity
         vendor_query = "SELECT id FROM vendors WHERE id = %s"
         cursor.execute(vendor_query, (vendor_id,))
         if not cursor.fetchone():
             return {"success": False, "message": "Unauthorized operation: Registered vendor not found."}
 
-        # 4. Prevent duplicate phone numbers under the same vendor
+        # Prevent duplicate phone numbers under the same vendor
         duplicate_query = "SELECT customer_id FROM customers WHERE vendor_id = %s AND phone = %s"
         cursor.execute(duplicate_query, (vendor_id, phone))
         if cursor.fetchone():
             return {"success": False, "message": f"Conflict: A customer with phone number '{phone}' is already registered under your account."}
 
-        # 5. Insert the new customer record
+        # Insert record
         insert_query = """
             INSERT INTO customers (vendor_id, customer_name, phone, email, address)
             VALUES (%s, %s, %s, %s, %s)
         """
-        customer_data = (vendor_id, name, phone, email, address)
-        cursor.execute(insert_query, customer_data)
-        
-        connection.commit()  # Save changes permanently to the disk
+        cursor.execute(insert_query, (vendor_id, name, phone, email, address))
+        connection.commit() 
 
         return {"success": True, "message": f"Customer '{name}' successfully registered!"}
 
     except Error as db_err:
         return {"success": False, "message": f"Database processing failure: {db_err}"}
-
     finally:
         if 'cursor' in locals():
             cursor.close()
         close_database_connection(connection)
 
+
 def view_customers(vendor_id):
     """
     Retrieves all customer records belonging to a specific vendor, sorted alphabetically.
-    
-    Args:
-        vendor_id (int): The unique ID of the logged-in vendor.
-        
-    Returns:
-        dict: A status dictionary containing 'success', 'message', and a 'customers' list.
     """
-    # 1. Validate baseline parameter presence
     if not vendor_id:
         return {"success": False, "message": "Authentication Missing: Vendor ID is required.", "customers": []}
 
@@ -82,22 +69,16 @@ def view_customers(vendor_id):
         return {"success": False, "message": "Database pipeline offline.", "customers": []}
 
     try:
-        # Open a dictionary cursor to automatically map database records to key-value pairs
         cursor = connection.cursor(dictionary=True)
-
-        # 2. Parameterized query isolating rows behind the vendor boundary, ordered alphabetically
-        # Using 'customer_name' to match your exact database column schema spelling
         query = """
             SELECT customer_id, customer_name, phone, email, address 
             FROM customers 
             WHERE vendor_id = %s 
             ORDER BY customer_name ASC
         """
-        
         cursor.execute(query, (vendor_id,))
         customer_list = cursor.fetchall()
 
-        # 3. Intercept empty state conditions gracefully
         if not customer_list:
             return {
                 "success": True, 
@@ -113,32 +94,24 @@ def view_customers(vendor_id):
 
     except Error as db_err:
         return {"success": False, "message": f"Database read transaction failed: {db_err}", "customers": []}
-
     finally:
-        # Release database server channel resources
         if 'cursor' in locals():
             cursor.close()
         close_database_connection(connection)
 
+
 def update_customer(vendor_id, customer_id, customer_name, phone, email=None, address=None):
     """
     Updates the profile of an existing customer belonging to the logged-in vendor.
-    Validates input parameters and ensures no duplicate phone numbers exist.
-    
-    Returns:
-        dict: Success status and feedback message.
     """
-    # 1. Validation of required inputs
     if not vendor_id or not customer_id or not customer_name or not phone:
         return {"success": False, "message": "Validation Failure: Vendor ID, Customer ID, Name, and Phone are mandatory."}
 
-    # Clean the string parameters
     customer_name = customer_name.strip()
     phone = phone.strip()
-    email = email.strip() if email else None
-    address = address.strip() if address else None
+    email = email.strip().lower() if email and email.strip() else None
+    address = address.strip() if address and address.strip() else None
 
-    # 2. Check phone formatting (10 digits)
     if not phone.isdigit() or len(phone) != 10:
         return {"success": False, "message": "Validation Failure: Phone number must contain exactly 10 digits."}
 
@@ -149,19 +122,18 @@ def update_customer(vendor_id, customer_id, customer_name, phone, email=None, ad
     try:
         cursor = connection.cursor(dictionary=True)
 
-        # 3. Check if the customer exists and actually belongs to this vendor
+        # Confirm customer belongs to the active vendor session
         exist_query = "SELECT customer_id FROM customers WHERE customer_id = %s AND vendor_id = %s"
         cursor.execute(exist_query, (customer_id, vendor_id))
         if not cursor.fetchone():
             return {"success": False, "message": "Operation Aborted: Customer profile not found or access denied."}
 
-        # 4. Check if the new phone number is already assigned to a DIFFERENT customer under this vendor
+        # Check cross-profile duplication conflicts
         dup_query = "SELECT customer_id FROM customers WHERE vendor_id = %s AND phone = %s AND customer_id != %s"
         cursor.execute(dup_query, (vendor_id, phone, customer_id))
         if cursor.fetchone():
             return {"success": False, "message": f"Conflict: The phone number '{phone}' is already registered to another customer."}
 
-        # 5. Execute the update
         update_query = """
             UPDATE customers 
             SET customer_name = %s, phone = %s, email = %s, address = %s 
@@ -174,25 +146,16 @@ def update_customer(vendor_id, customer_id, customer_name, phone, email=None, ad
 
     except Error as db_err:
         return {"success": False, "message": f"Database update failure: {db_err}"}
-
     finally:
         if 'cursor' in locals():
             cursor.close()
         close_database_connection(connection)
 
+
 def delete_customer(vendor_id, customer_id):
     """
     Safely deletes a customer record belonging to the logged-in vendor.
-    Checks if the customer exists before attempting to delete.
-    
-    Args:
-        vendor_id (int): The ID of the logged-in vendor.
-        customer_id (int): The ID of the customer to be deleted.
-        
-    Returns:
-        dict: Success status and feedback message.
     """
-    # 1. Validate baseline parameters
     if not vendor_id or not customer_id:
         return {"success": False, "message": "Validation Failure: Vendor ID and Customer ID are mandatory."}
 
@@ -203,49 +166,33 @@ def delete_customer(vendor_id, customer_id):
     try:
         cursor = connection.cursor(dictionary=True)
 
-        # 2. Check if the customer exists and actually belongs to this vendor
-        check_query = "SELECT customer_id, customer_name FROM customers WHERE customer_id = %s AND vendor_id = %s"
+        check_query = "SELECT customer_name FROM customers WHERE customer_id = %s AND vendor_id = %s"
         cursor.execute(check_query, (customer_id, vendor_id))
         customer_record = cursor.fetchone()
 
         if not customer_record:
-            return {
-                "success": False, 
-                "message": "Operation Aborted: Customer profile not found or access denied."
-            }
+            return {"success": False, "message": "Operation Aborted: Customer profile not found or access denied."}
 
-        # Keep the customer name for a friendly success message
         deleted_name = customer_record['customer_name']
 
-        # 3. Execute the deletion
         delete_query = "DELETE FROM customers WHERE customer_id = %s AND vendor_id = %s"
         cursor.execute(delete_query, (customer_id, vendor_id))
-        
-        # 4. Commit changes to write deletion permanently to the disk
         connection.commit()
 
-        return {
-            "success": True, 
-            "message": f"Customer '{deleted_name}' (ID: {customer_id}) has been successfully deleted from your directory."
-        }
+        return {"success": True, "message": f"Customer '{deleted_name}' (ID: {customer_id}) has been successfully deleted."}
 
     except Error as db_err:
         return {"success": False, "message": f"Database execution failure during deletion: {db_err}"}
-
     finally:
-        # 5. Resource cleanup
         if 'cursor' in locals():
             cursor.close()
         close_database_connection(connection)
+
+
 def search_customers(vendor_id, search_name=None, phone=None, email=None, customer_id=None):
     """
     Dynamically filters and searches the vendor's customer directory.
-    Supports partial matching for names and exact matching for phone numbers, emails, and IDs.
-    
-    Returns:
-        dict: Success status, descriptive message, and a list of matching customer records.
     """
-    # 1. Enforce active session baseline constraint
     if not vendor_id:
         return {"success": False, "message": "Authentication Missing: Vendor ID is required.", "customers": []}
 
@@ -255,62 +202,41 @@ def search_customers(vendor_id, search_name=None, phone=None, email=None, custom
 
     try:
         cursor = connection.cursor(dictionary=True)
-
-        # 2. Setup baseline SQL query locked behind the active vendor wall
-        sql_base = """
-            SELECT customer_id, customer_name, phone, email, address 
-            FROM customers 
-            WHERE vendor_id = %s
-        """
+        sql_base = "SELECT customer_id, customer_name, phone, email, address FROM customers WHERE vendor_id = %s"
         query_conditions = []
         execution_arguments = [vendor_id]
 
-        # 3. Append dynamic filtering clauses based on provided search inputs
         if customer_id is not None:
             query_conditions.append("customer_id = %s")
             execution_arguments.append(int(customer_id))
 
-        if phone:
+        if phone and phone.strip():
             query_conditions.append("phone = %s")
             execution_arguments.append(phone.strip())
 
-        if email:
+        if email and email.strip():
             query_conditions.append("email = %s")
             execution_arguments.append(email.strip().lower())
 
-        if search_name:
-            # SQL LIKE with wildcards allows partial name match
+        if search_name and search_name.strip():
             query_conditions.append("customer_name LIKE %s")
             execution_arguments.append(f"%{search_name.strip()}%")
 
-        # 4. Join additional query parameters using AND gates if active search filters exist
         if query_conditions:
             sql_base += " AND " + " AND ".join(query_conditions)
 
-        # Apply standard alphabetical sorting to results
         sql_base += " ORDER BY customer_name ASC"
 
-        # 5. Execute secure parameterized query
         cursor.execute(sql_base, tuple(execution_arguments))
         matched_customers = cursor.fetchall()
 
-        # 6. Intercept empty result states gracefully
         if not matched_customers:
-            return {
-                "success": True, 
-                "message": "No customer profiles match your search criteria.", 
-                "customers": []
-            }
+            return {"success": True, "message": "No customer profiles match your search criteria.", "customers": []}
 
-        return {
-            "success": True, 
-            "message": f"Successfully found {len(matched_customers)} matching customer profiles.", 
-            "customers": matched_customers
-        }
+        return {"success": True, "message": f"Successfully found {len(matched_customers)} profiles.", "customers": matched_customers}
 
     except Error as db_fault:
         return {"success": False, "message": f"Database search execution failure: {db_fault}", "customers": []}
-        
     finally:
         if 'cursor' in locals():
             cursor.close()
@@ -320,10 +246,7 @@ def search_customers(vendor_id, search_name=None, phone=None, email=None, custom
 def customer_purchase_history(vendor_id, customer_id):
     """
     Retrieves the complete transactional history and key summary metrics for a given customer.
-    Ensures that data boundaries match the current logged-in vendor context securely.
-    
-    Returns:
-        dict: Operational success status, response message, history summaries, and bill items.
+    Fixes the total expense aggregation loop multiplier bug.
     """
     if not vendor_id or not customer_id:
         return {"success": False, "message": "Validation Failure: Vendor ID and Customer ID are required.", "history": None}
@@ -335,7 +258,6 @@ def customer_purchase_history(vendor_id, customer_id):
     try:
         cursor = connection.cursor(dictionary=True)
 
-        # 1. Authority Validation: Confirm customer ownership boundary matching
         check_query = "SELECT customer_name FROM customers WHERE customer_id = %s AND vendor_id = %s"
         cursor.execute(check_query, (customer_id, vendor_id))
         customer_record = cursor.fetchone()
@@ -345,7 +267,6 @@ def customer_purchase_history(vendor_id, customer_id):
 
         customer_name = customer_record['customer_name']
 
-        # 2. Main Relational Query utilizing SQL JOINs to pull down transaction details
         query = """
             SELECT 
                 s.sale_id,
@@ -365,7 +286,6 @@ def customer_purchase_history(vendor_id, customer_id):
         cursor.execute(query, (customer_id, vendor_id))
         raw_rows = cursor.fetchall()
 
-        # 3. Handle empty transaction histories gracefully
         if not raw_rows:
             return {
                 "success": True,
@@ -376,11 +296,10 @@ def customer_purchase_history(vendor_id, customer_id):
                     "total_spent": 0.00,
                     "first_purchase_date": None,
                     "last_purchase_date": None,
-                    "bills": {}
+                    "bills": []
                 }
             }
 
-        # 4. Process flat data into nested bill structures and compile metrics
         bills_dict = {}
         total_spent = 0.00
         purchase_dates = []
@@ -388,7 +307,6 @@ def customer_purchase_history(vendor_id, customer_id):
         for row in raw_rows:
             sale_id = row['sale_id']
             
-            # If the bill bucket hasn't been initialized yet, build it out
             if sale_id not in bills_dict:
                 bills_dict[sale_id] = {
                     "bill_number": sale_id,
@@ -396,11 +314,10 @@ def customer_purchase_history(vendor_id, customer_id):
                     "grand_total": float(row['grand_total']),
                     "items": []
                 }
-                # Track metadata summaries
+                # FIX: Increment spent total exactly once per distinctive bill entity
                 total_spent += float(row['grand_total'])
                 purchase_dates.append(row['sale_date'])
 
-            # Add the individual line item to the bill
             bills_dict[sale_id]["items"].append({
                 "product_id": row['product_id'],
                 "product_name": row['product_name'],
@@ -409,7 +326,6 @@ def customer_purchase_history(vendor_id, customer_id):
                 "subtotal": float(row['item_subtotal'])
             })
 
-        # Compile summaries
         summary_metrics = {
             "customer_name": customer_name,
             "total_orders": len(bills_dict),
@@ -427,8 +343,44 @@ def customer_purchase_history(vendor_id, customer_id):
 
     except Error as db_err:
         return {"success": False, "message": f"Database processing failure: {db_err}", "history": None}
-
     finally:
         if 'cursor' in locals():
+            cursor.close()
+        close_database_connection(connection)
+
+def get_customer_dashboard_metrics(vendor_id):
+    """
+    Exposes system-wide relationship metrics for customers tied to a vendor.
+    """
+    if not vendor_id:
+        return {"success": False, "message": "Validation Failure: Vendor ID is required.", "data": None}
+
+    connection = get_database_connection()
+    if not connection:
+        return {"success": False, "message": "Database pipeline offline.", "data": None}
+
+    try:
+        cursor = connection.cursor(dictionary=True)
+
+        # Counting unique customers who have entries in sales logs with this vendor
+        query = """
+            SELECT COUNT(DISTINCT customer_id) as total_customers 
+            FROM sales 
+            WHERE vendor_id = %s AND customer_id IS NOT NULL
+        """
+        cursor.execute(query, (vendor_id,))
+        result = cursor.fetchone()
+
+        return {
+            "success": True,
+            "message": "Customer dashboard metrics fetched successfully.",
+            "data": {
+                "total_customers": int(result["total_customers"]) if result else 0
+            }
+        }
+    except Error as db_error:
+        return {"success": False, "message": f"Database error in customer helper: {db_error}", "data": None}
+    finally:
+        if 'cursor' in locals() and cursor:
             cursor.close()
         close_database_connection(connection)

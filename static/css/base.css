@@ -1,0 +1,147 @@
+/* Custom Global Variables Defining SaaS Theme Palette Configuration */
+:root {
+    --vh-primary-blue: #0d6efd;
+    --vh-primary-hover: #0b5ed7;
+    --vh-dark-sidebar: #1e293b;
+    --vh-sidebar-hover: #334155;
+    --vh-sidebar-active: #2563eb;
+    --vh-text-dark: #0f172a;
+    --vh-bg-light: #f8fafc;
+    --vh-transition-speed: 0.25s;
+    --vh-border-radius: 0.5rem;
+}
+
+/* Global Document Normalization Layout Engine Rules */
+html, body {
+    height: 100%;
+    margin: 0;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--vh-text-dark);
+    background-color: var(--vh-bg-light);
+}
+
+.app-container {
+    display: flex;
+    height: 100vh;
+    width: 100vw;
+    overflow: hidden;
+}
+
+/* 1. Fixed Left Sidebar Blueprint Layer Styling rules */
+.sidebar-wrapper {
+    width: 260px;
+    height: 100%;
+    min-width: 260px;
+    z-index: 1040;
+    background-color: var(--vh-dark-sidebar) !important;
+    transition: transform var(--vh-transition-speed) ease-in-out;
+}
+
+.sidebar-brand-box {
+    height: 65px;
+}
+
+.sidebar-nav .nav-link {
+    font-weight: 500;
+    transition: all var(--vh-transition-speed) ease;
+}
+
+.sidebar-nav .nav-link:hover {
+    background-color: var(--vh-sidebar-hover);
+    padding-left: 1.25rem !important;
+}
+
+.sidebar-nav .nav-link.active {
+    background-color: var(--vh-sidebar-active) !important;
+    font-weight: 600;
+}
+
+/* 2. Workspace Content Layout Styling Configuration Rules */
+.workspace-wrapper {
+    overflow-y: auto;
+    height: 100%;
+}
+
+.navbar {
+    height: 65px;
+    z-index: 1030;
+}
+
+.content-body {
+    background-color: var(--vh-bg-light) !important;
+}
+
+/* 3. Reusable UI Element Class Blueprint Standards */
+
+/* Rounded SaaS Component Design System Elevation Specifications */
+.card {
+    border: none !important;
+    border-radius: var(--vh-border-radius) !important;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.05);
+    transition: transform var(--vh-transition-speed) ease, box-shadow var(--vh-transition-speed) ease;
+}
+
+.card:hover {
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+}
+
+/* Custom Blue Primary Interactive Control Framework */
+.btn-primary {
+    background-color: var(--vh-primary-blue) !important;
+    border-color: var(--vh-primary-blue) !important;
+    border-radius: var(--vh-border-radius) !important;
+    font-weight: 500 !important;
+    padding: 0.5rem 1.25rem !important;
+    transition: background-color var(--vh-transition-speed) cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.btn-primary:hover, .btn-primary:focus {
+    background-color: var(--vh-primary-hover) !important;
+    border-color: var(--vh-primary-hover) !important;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25) !important;
+}
+
+/* Professional Tables Formatting Patterns */
+.table-responsive {
+    border-radius: var(--vh-border-radius);
+    background-color: #ffffff;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+}
+
+.table {
+    margin-bottom: 0 !important;
+    vertical-align: middle;
+}
+
+.table th {
+    background-color: #f1f5f9 !important;
+    color: #475569 !important;
+    font-weight: 600 !important;
+    text-transform: uppercase !important;
+    font-size: 0.75rem !important;
+    letter-spacing: 0.05em !important;
+    padding: 1rem !important;
+    border-bottom: 2px solid #e2e8f0 !important;
+}
+
+.table td {
+    padding: 1rem !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    color: #334155;
+}
+
+.table tbody tr:hover td {
+    background-color: #f8fafc !important;
+}
+
+/* 4. Responsive Screen Breakpoint Transition Transformations Rules */
+@media (max-width: 767.98px) {
+    .sidebar-wrapper {
+        position: fixed;
+        transform: translateX(-100%);
+    }
+    
+    .sidebar-wrapper.show-sidebar {
+        transform: translateX(0);
+    }
+}

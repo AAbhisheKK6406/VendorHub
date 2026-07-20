@@ -1,0 +1,39 @@
+/* static/css/billing.css */
+
+.billing-wrapper {
+    background-color: #f8f9fa;
+    min-height: calc(100vh - 60px);
+}
+
+.fs-7 {
+    font-size: 0.75rem;
+}
+
+#billingTable th {
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    background-color: #f1f3f5;
+    color: #495057;
+    border-bottom: 2px solid #dee2e6;
+}
+
+#billingTable td {
+    vertical-align: middle;
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+    color: #212529;
+}
+
+.form-control:focus, .form-select:focus {
+    border-color: #86b7fe;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.15);
+}
+
+.card {
+    transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+
+.btn:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+}

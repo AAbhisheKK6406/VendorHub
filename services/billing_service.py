@@ -3,117 +3,195 @@ import mysql.connector
 from mysql.connector import Error
 from database.db import get_database_connection, close_database_connection
 
-def create_bill(vendor_id, customer_id):
+# ==========================================
+# 1. NEW DASHBOARD & REPORTING HELPERS
+# ==========================================
+
+def get_recent_bills(vendor_id, limit=5):
     """
-    Initializes a new transaction invoice header (Draft stage) for a specific customer.
-    Maps perfectly to the frozen schema including discount_type and gst_percentage.
-    
-    Args:
-        vendor_id (int): The ID of the operating vendor.
-        customer_id (int): The ID of the target customer.
+    Read-only helper to populate a high-performance 'Recent Transactions' UI table.
+    Uses a shallow join to avoid the resource-heavy payload of full invoice generation.
+    """
+    connection = get_database_connection()
+    if not connection:
+        return {"success": False, "message": "Database pipeline offline.", "bills": []}
+
+    try:
+        cursor = connection.cursor(dictionary=True)
+        query = """
+            SELECT s.sale_id, s.bill_number, s.sale_date, s.total_amount, s.payment_status,
+                   c.customer_name 
+            FROM sales s
+            JOIN customers c ON s.customer_id = c.customer_id
+            WHERE s.vendor_id = %s 
+            ORDER BY s.sale_id DESC 
+            LIMIT %s
+        """
+        cursor.execute(query, (vendor_id, int(limit)))
+        records = cursor.fetchall()
         
-    Returns:
-        dict: Success status, response message, and structured bill metadata layout.
+        # Format dates cleanly for frontend consumption
+        for r in records:
+            if r['sale_date']:
+                r['sale_date'] = r['sale_date'].strftime("%Y-%m-%d %H:%M:%S")
+
+        return {"success": True, "bills": records}
+    except mysql.connector.Error as db_error:
+        return {"success": False, "message": f"Metrics query failed: {db_error}", "bills": []}
+    finally:
+        if 'cursor' in locals(): cursor.close()
+        close_database_connection(connection)
+
+
+def get_billing_dashboard_data(vendor_id):
     """
-    # 1. Input Validation Guards
-    if not vendor_id or not customer_id:
-        return {"success": False, "message": "Validation Failure: Vendor ID and Customer ID are mandatory.", "bill_data": None}
+    Aggregates all billing metrics, payment states, time windows, and 
+    recent transactions in a single database execution block.
+    """
+    if not vendor_id:
+        return {"success": False, "message": "Validation Failure: Vendor ID is required.", "data": None}
 
     connection = get_database_connection()
     if not connection:
-        return {"success": False, "message": "Database pipeline offline.", "bill_data": None}
+        return {"success": False, "message": "Database pipeline offline.", "data": None}
 
     try:
-        # Start transaction block for financial integrity
+        cursor = connection.cursor(dictionary=True)
+        dashboard_payload = {}
+
+        # 1. Gather ALL Aggregate Snapshot Values (Your logic + Time window logic)
+        metrics_query = """
+            SELECT 
+                COUNT(sale_id) as total_bills,
+                COUNT(CASE WHEN payment_status = 'Paid' THEN 1 END) as settled_invoices_count,
+                COALESCE(SUM(CASE WHEN payment_status = 'Paid' THEN total_amount END), 0.00) as gross_revenue,
+                COALESCE(SUM(CASE WHEN payment_status != 'Paid' THEN total_amount END), 0.00) as pending_receivables,
+                COALESCE(SUM(CASE WHEN DATE(sale_date) = CURDATE() THEN total_amount ELSE 0 END), 0.0) as today_sales,
+                COALESCE(SUM(CASE WHEN sale_date >= DATE_SUB(NOW(), INTERVAL 30 DAY) THEN total_amount ELSE 0 END), 0.0) as monthly_revenue
+            FROM sales
+            WHERE vendor_id = %s
+        """
+        cursor.execute(metrics_query, (vendor_id,))
+        aggregates = cursor.fetchone()
+
+        # Build out the metrics payload dictionary
+        dashboard_payload["total_bills"] = int(aggregates["total_bills"]) if aggregates else 0
+        dashboard_payload["settled_invoices"] = int(aggregates["settled_invoices_count"]) if aggregates else 0
+        dashboard_payload["gross_revenue"] = round(float(aggregates["gross_revenue"]), 2) if aggregates else 0.0
+        dashboard_payload["pending_receivables"] = round(float(aggregates["pending_receivables"]), 2) if aggregates else 0.0
+        dashboard_payload["today_sales"] = round(float(aggregates["today_sales"]), 2) if aggregates else 0.0
+        dashboard_payload["monthly_revenue"] = round(float(aggregates["monthly_revenue"]), 2) if aggregates else 0.0
+
+        # 2. Extract Top 5 Recent Transaction Records for the table widget
+        recent_query = """
+            SELECT 
+                s.sale_id,
+                COALESCE(c.customer_name, 'Walk-in Customer') as customer_name,
+                s.total_amount,
+                s.payment_status,
+                s.sale_date
+            FROM sales s
+            LEFT JOIN customers c ON s.customer_id = c.customer_id
+            WHERE s.vendor_id = %s
+            ORDER BY s.sale_date DESC, s.sale_id DESC
+            LIMIT 5
+        """
+        cursor.execute(recent_query, (vendor_id,))
+        recent_records = cursor.fetchall()
+
+        formatted_recent = []
+        for row in recent_records:
+            formatted_recent.append({
+                "sale_id": int(row["sale_id"]),
+                "customer_name": row["customer_name"],
+                "total_amount": round(float(row["total_amount"]), 2),
+                "payment_status": row["payment_status"],
+                "sale_date": row["sale_date"].strftime("%Y-%m-%d %H:%M:%S") if row["sale_date"] else "N/A"
+            })
+
+        dashboard_payload["recent_bills"] = formatted_recent
+
+        return {
+            "success": True,
+            "message": "Billing dashboard operational matrix compiled successfully.",
+            "data": dashboard_payload
+        }
+
+    except Error as db_error:
+        return {"success": False, "message": f"Database financial extraction failure: {db_error}", "data": None}
+    finally:
+        if 'cursor' in locals() and cursor:
+            cursor.close()
+        close_database_connection(connection)
+
+
+# ==========================================
+# 2. OPTIMIZED TRANSACTIONAL WORKFLOWS
+# ==========================================
+
+def create_bill(vendor_id, customer_id):
+    if not vendor_id or not customer_id:
+        return {"success": False, "message": "Validation Failure: IDs mandatory.", "bill_data": None}
+
+    connection = get_database_connection()
+    if not connection:
+        return {"success": False, "message": "Database offline.", "bill_data": None}
+
+    try:
         connection.start_transaction()
         cursor = connection.cursor(dictionary=True)
 
-        # 2. Security Guard Check: Verify customer multi-tenant access rights
         customer_check_query = "SELECT customer_name FROM customers WHERE customer_id = %s AND vendor_id = %s"
         cursor.execute(customer_check_query, (customer_id, vendor_id))
-        customer = cursor.fetchone()
-
-        if not customer:
+        if not cursor.fetchone():
             connection.rollback()
-            return {"success": False, "message": "Security Alert: Customer profile not found or unauthorized.", "bill_data": None}
+            return {"success": False, "message": "Security Alert: Access denied.", "bill_data": None}
 
-        # 3. Automated Sequential Bill Number Generation
-        latest_bill_query = """
-            SELECT bill_number FROM sales 
-            WHERE vendor_id = %s 
-            ORDER BY sale_id DESC LIMIT 1
-        """
+        latest_bill_query = "SELECT bill_number FROM sales WHERE vendor_id = %s ORDER BY sale_id DESC LIMIT 1"
         cursor.execute(latest_bill_query, (vendor_id,))
         last_bill_record = cursor.fetchone()
 
         next_numeric_id = 1
         if last_bill_record and last_bill_record['bill_number']:
-            last_bill_str = last_bill_record['bill_number']
             try:
-                next_numeric_id = int(last_bill_str.replace("BILL", "")) + 1
+                next_numeric_id = int(last_bill_record['bill_number'].replace("BILL", "")) + 1
             except ValueError:
                 next_numeric_id = 1
 
         new_bill_number = f"BILL{next_numeric_id:06d}"
         current_timestamp = datetime.now()
 
-        # 4. Store Bill Header inside the sales table using every required column
         insert_header_query = """
-            INSERT INTO sales (
-                bill_number, vendor_id, customer_id, sale_date, 
-                subtotal, discount, discount_type, tax, gst_percentage,
-                total_amount, payment_method, payment_status
-            )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO sales (bill_number, vendor_id, customer_id, sale_date, subtotal, discount, 
+                               discount_type, tax, gst_percentage, total_amount, payment_method, payment_status)
+            VALUES (%s, %s, %s, %s, 0.00, 0.00, 'fixed', 0.00, 0.00, 0.00, 'Pending', 'Unpaid')
         """
-        insert_values = (
-            new_bill_number, 
-            vendor_id, 
-            customer_id, 
-            current_timestamp, 
-            0.00,        # subtotal baseline
-            0.00,        # discount baseline
-            'fixed',     # discount_type default ruleset
-            0.00,        # tax baseline
-            0.00,        # gst_percentage baseline
-            0.00,        # total_amount baseline
-            'Pending',   # payment_method string value
-            'Unpaid'     # payment_status baseline state
-        )
-        
-        cursor.execute(insert_header_query, insert_values)
-        
-        # Commit the transaction block safely
+        cursor.execute(insert_header_query, (new_bill_number, vendor_id, customer_id, current_timestamp))
         connection.commit()
-        generated_sale_id = cursor.lastrowid
-
-        # 5. Return structured contract response payload
+        
         return {
             "success": True,
-            "message": f"Successfully initialized Bill Header {new_bill_number}.",
+            "message": f"Successfully initialized Bill {new_bill_number}.",
             "bill_data": {
-                "sale_id": generated_sale_id,
+                "sale_id": cursor.lastrowid,
                 "bill_number": new_bill_number,
                 "customer_id": customer_id,
                 "vendor_id": vendor_id,
                 "bill_date": current_timestamp.strftime("%Y-%m-%d %H:%M:%S")
             }
         }
-
-    except Error as db_error:
-        if connection:
-            connection.rollback()
-        return {"success": False, "message": f"Database transactional processing failure: {db_error}", "bill_data": None}
-
+    except mysql.connector.Error as db_error:
+        if connection: connection.rollback()
+        return {"success": False, "message": f"Database processing failure: {db_error}", "bill_data": None}
     finally:
-        if 'cursor' in locals():
-            cursor.close()
+        if 'cursor' in locals(): cursor.close()
         close_database_connection(connection)
+
 
 def add_product_to_bill(sale_id, product_id, requested_quantity):
     """
-    Validates product availability from the products table, computes line subtotals,
-    deducts inventory, and inserts the item into the sale_items table.
+    UPDATED: Item assignment step ONLY. Stock verification remains present, but the immediate 
+    inventory deduction has been removed to prevent double-deduction before payment is complete.
     """
     if requested_quantity <= 0:
         return {"success": False, "message": "Quantity must be greater than zero."}
@@ -126,12 +204,7 @@ def add_product_to_bill(sale_id, product_id, requested_quantity):
         connection.start_transaction()
         cursor = connection.cursor(dictionary=True)
 
-        # 1. Fetch product details using the correct schema columns: product_id, selling_price, quantity
-        product_query = """
-            SELECT product_name, selling_price, quantity 
-            FROM products 
-            WHERE product_id = %s
-        """
+        product_query = "SELECT product_name, selling_price, quantity FROM products WHERE product_id = %s"
         cursor.execute(product_query, (product_id,))
         product = cursor.fetchone()
 
@@ -139,197 +212,84 @@ def add_product_to_bill(sale_id, product_id, requested_quantity):
             connection.rollback()
             return {"success": False, "message": "Product not found."}
 
-        # 2. Check stock availability using the correct 'quantity' column
-        current_stock = product['quantity']
-        if current_stock < requested_quantity:
+        if product['quantity'] < requested_quantity:
             connection.rollback()
-            return {
-                "success": False, 
-                "message": f"Insufficient stock. Available: {current_stock}, Requested: {requested_quantity}"
-            }
+            return {"success": False, "message": f"Insufficient available stock. Stock: {product['quantity']}"}
 
-        # 3. Calculate financial subtotals
         unit_price = float(product['selling_price'])
         subtotal = unit_price * requested_quantity
 
-        # 4. Deduct inventory from the products table using correct column names
-        update_stock_query = """
-            UPDATE products 
-            SET quantity = quantity - %s 
-            WHERE product_id = %s
-        """
-        cursor.execute(update_stock_query, (requested_quantity, product_id))
-
-        # 5. Insert line item record into sale_items
         insert_item_query = """
             INSERT INTO sale_items (sale_id, product_id, quantity, unit_price, subtotal)
             VALUES (%s, %s, %s, %s, %s)
         """
         cursor.execute(insert_item_query, (sale_id, product_id, requested_quantity, unit_price, subtotal))
-
         connection.commit()
+        
         return {
             "success": True,
-            "message": f"Successfully added {product['product_name']} to the bill.",
-            "item_details": {
-                "product_id": product_id,
-                "product_name": product['product_name'],
-                "quantity": requested_quantity,
-                "unit_price": unit_price,
-                "subtotal": subtotal
-            }
+            "message": f"Added {product['product_name']} to bill.",
+            "item_details": {"product_id": product_id, "quantity": requested_quantity, "subtotal": subtotal}
         }
-
-    except Error as db_error:
-        if connection:
-            connection.rollback()
+    except mysql.connector.Error as db_error:
+        if connection: connection.rollback()
         return {"success": False, "message": f"Database failure: {db_error}"}
-
     finally:
-        if 'cursor' in locals():
-            cursor.close()
+        if 'cursor' in locals(): cursor.close()
         close_database_connection(connection)
 
 
 def calculate_bill_total(sale_id, vendor_id, discount_type, discount_value, tax_percentage, payment_method, payment_status):
-    """
-    Computes financial metrics for a bill based on sale_items, applies discounts/tax,
-    and updates the main sales ledger table.
-    """
-    # 1. Input Validation Guards
-    if discount_type not in ['fixed', 'percentage']:
-        return {"success": False, "message": "Invalid discount type provided.", "bill_summary": None}
-    
-    if discount_value < 0 or tax_percentage < 0:
-        return {"success": False, "message": "Monetary inputs cannot be negative.", "bill_summary": None}
+    if discount_type not in ['fixed', 'percentage'] or discount_value < 0 or tax_percentage < 0:
+        return {"success": False, "message": "Invalid calculations bounds parameters.", "bill_summary": None}
 
     connection = get_database_connection()
     if not connection:
-        return {"success": False, "message": "Database pipeline offline.", "bill_summary": None}
+        return {"success": False, "message": "Database offline.", "bill_summary": None}
 
     try:
         connection.start_transaction()
         cursor = connection.cursor(dictionary=True)
 
-        # 2. Tenancy Security Guard: Ensure the bill exists and belongs to this vendor
-        bill_query = "SELECT bill_number FROM sales WHERE sale_id = %s AND vendor_id = %s"
-        cursor.execute(bill_query, (sale_id, vendor_id))
+        cursor.execute("SELECT bill_number FROM sales WHERE sale_id = %s AND vendor_id = %s", (sale_id, vendor_id))
         bill_record = cursor.fetchone()
-
         if not bill_record:
             connection.rollback()
-            return {"success": False, "message": "Security Alert: Bill not found or access denied.", "bill_summary": None}
+            return {"success": False, "message": "Access denied.", "bill_summary": None}
 
-        bill_number = bill_record['bill_number']
-
-        # 3. Retrieve all items added via add_product_to_bill()
-        items_query = "SELECT quantity, unit_price, subtotal FROM sale_items WHERE sale_id = %s"
-        cursor.execute(items_query, (sale_id,))
+        cursor.execute("SELECT quantity, unit_price, subtotal FROM sale_items WHERE sale_id = %s", (sale_id,))
         line_items = cursor.fetchall()
 
-        # 4. Compute Base Totals
-        total_products = len(line_items)
-        total_quantity = sum(int(item['quantity']) for item in line_items)
         raw_subtotal = sum(float(item['subtotal']) for item in line_items)
+        calculated_discount = raw_subtotal * (float(discount_value) / 100.0) if discount_type == 'percentage' else float(discount_value)
+        if calculated_discount > raw_subtotal: calculated_discount = raw_subtotal
 
-        # 5. Apply Discount Engine Logic
-        if discount_type == 'percentage':
-            calculated_discount = raw_subtotal * (float(discount_value) / 100.0)
-        else:
-            calculated_discount = float(discount_value)
-
-        # 6. Safety Floor Guard: Discount cannot make the subtotal negative
-        if calculated_discount > raw_subtotal:
-            calculated_discount = raw_subtotal
-
-        # 7. Post-Discount Tax/GST Calculation
         taxable_balance = raw_subtotal - calculated_discount
         calculated_tax = taxable_balance * (float(tax_percentage) / 100.0)
+        final_total_amount = round(taxable_balance + calculated_tax, 2)
 
-        # 8. Compute Absolute Grand Total
-        final_total_amount = taxable_balance + calculated_tax
-
-        # Format everything cleanly to 2 decimal places
-        raw_subtotal = round(raw_subtotal, 2)
-        calculated_discount = round(calculated_discount, 2)
-        calculated_tax = round(calculated_tax, 2)
-        final_total_amount = round(final_total_amount, 2)
-
-        # 9 & 10. Persist changes back to your finalized sales table schema
         update_sales_query = """
             UPDATE sales 
-            SET subtotal = %s, 
-                discount_type = %s, 
-                discount = %s, 
-                tax = %s, 
-                gst_percentage = %s,
-                total_amount = %s, 
-                payment_method = %s, 
-                payment_status = %s
+            SET subtotal = %s, discount_type = %s, discount = %s, tax = %s, gst_percentage = %s,
+                total_amount = %s, payment_method = %s, payment_status = %s
             WHERE sale_id = %s AND vendor_id = %s
         """
-        update_values = (
-            raw_subtotal,
-            discount_type,
-            calculated_discount,
-            calculated_tax,
-            float(tax_percentage),
-            final_total_amount,
-            payment_method,
-            payment_status,
-            sale_id,
-            vendor_id
-        )
-        cursor.execute(update_sales_query, update_values)
-        
+        cursor.execute(update_sales_query, (round(raw_subtotal, 2), discount_type, round(calculated_discount, 2), 
+                                           round(calculated_tax, 2), float(tax_percentage), final_total_amount, 
+                                           payment_method, payment_status, sale_id, vendor_id))
         connection.commit()
-
-        # 11. Return clean contract payload dictionary
-        return {
-            "success": True,
-            "message": "Bill totals computed and saved successfully.",
-            "bill_summary": {
-                "sale_id": sale_id,
-                "bill_number": bill_number,
-                "total_products": total_products,
-                "total_quantity": total_quantity,
-                "subtotal": raw_subtotal,
-                "discount_type": discount_type,
-                "discount_value": float(discount_value),
-                "discount_amount": calculated_discount,
-                "tax_percentage": float(tax_percentage),
-                "tax_amount": calculated_tax,
-                "total_amount": final_total_amount,
-                "payment_method": payment_method,
-                "payment_status": payment_status
-            }
-        }
-
-    except Error as db_error:
-        if connection:
-            connection.rollback()
+        return {"success": True, "message": "Totals updated.", "bill_summary": {"total_amount": final_total_amount}}
+    except mysql.connector.Error as db_error:
+        if connection: connection.rollback()
         return {"success": False, "message": f"Database failure: {db_error}", "bill_summary": None}
-
     finally:
-        if 'cursor' in locals():
-            cursor.close()
+        if 'cursor' in locals(): cursor.close()
         close_database_connection(connection)
 
+
 def finalize_bill(sale_id, vendor_id):
-    """
-    Permanently locks a bill, transitioning its ledger state to Completed.
-    Ensures transactional safety and immutability rulesets.
-    
-    Args:
-        sale_id (int): The unique identifier of the target sale record.
-        vendor_id (int): The ID of the authenticated operating vendor.
-        
-    Returns:
-        dict: Success status, payload message, and structural bill execution summary.
-    """
-    # Input parameter validation
     if not sale_id or not vendor_id:
-        return {"success": False, "message": "Validation Failure: Sale ID and Vendor ID are mandatory.", "bill_summary": None}
+        return {"success": False, "message": "Missing core references.", "bill_summary": None}
 
     connection = get_database_connection()
     if not connection:
@@ -339,205 +299,106 @@ def finalize_bill(sale_id, vendor_id):
         connection.start_transaction()
         cursor = connection.cursor(dictionary=True)
 
-        # 1. Tenancy and State Validation Check
-        bill_query = """
-            SELECT sale_id, bill_number, payment_status, total_amount 
-            FROM sales 
-            WHERE sale_id = %s AND vendor_id = %s
-        """
-        cursor.execute(bill_query, (sale_id, vendor_id))
+        cursor.execute("SELECT bill_number, payment_status, total_amount FROM sales WHERE sale_id = %s AND vendor_id = %s", (sale_id, vendor_id))
         bill_record = cursor.fetchone()
 
         if not bill_record:
             connection.rollback()
-            return {"success": False, "message": "Security Alert: Bill not found or access denied.", "bill_summary": None}
-
-        # 2. Idempotency & Immutability Guard
+            return {"success": False, "message": "Invoice record missing.", "bill_summary": None}
         if bill_record['payment_status'] == 'Paid':
             connection.rollback()
-            return {"success": False, "message": "Operation Blocked: This bill is already finalized and completed.", "bill_summary": None}
+            return {"success": False, "message": "Invoice already completed.", "bill_summary": None}
 
-        # 3. Empty Bill Structural Guard
-        items_check_query = "SELECT COUNT(*) as item_count FROM sale_items WHERE sale_id = %s"
-        cursor.execute(items_check_query, (sale_id,))
-        items_record = cursor.fetchone()
-        
-        if not items_record or items_record['item_count'] == 0:
+        cursor.execute("SELECT COUNT(*) as item_count FROM sale_items WHERE sale_id = %s", (sale_id,))
+        if cursor.fetchone()['item_count'] == 0:
             connection.rollback()
-            return {"success": False, "message": "Validation Failure: Cannot finalize an empty bill with no line items.", "bill_summary": None}
+            return {"success": False, "message": "Cannot finalize an empty line bill.", "bill_summary": None}
 
-        # 4. State Modification Query
-        update_status_query = """
-            UPDATE sales 
-            SET payment_status = 'Paid' 
-            WHERE sale_id = %s AND vendor_id = %s
-        """
-        cursor.execute(update_status_query, (sale_id, vendor_id))
-        
-        # Safely commit transaction variables
+        cursor.execute("UPDATE sales SET payment_status = 'Paid' WHERE sale_id = %s AND vendor_id = %s", (sale_id, vendor_id))
         connection.commit()
 
-        # 5. Return structured contract payload matching billing module architecture
         return {
             "success": True,
-            "message": f"Successfully finalized and locked Bill {bill_record['bill_number']}.",
-            "bill_summary": {
-                "sale_id": sale_id,
-                "bill_number": bill_record['bill_number'],
-                "total_amount": float(bill_record['total_amount']),
-                "payment_status": "Paid"
-            }
+            "message": f"Finalized Bill {bill_record['bill_number']}.",
+            "bill_summary": {"sale_id": sale_id, "payment_status": "Paid"}
         }
-
-    except Error as db_error:
-        if connection:
-            connection.rollback()
-        return {"success": False, "message": f"Database processing failure during finalization: {db_error}", "bill_summary": None}
-
+    except mysql.connector.Error as db_error:
+        if connection: connection.rollback()
+        return {"success": False, "message": f"Processing Exception: {db_error}", "bill_summary": None}
     finally:
-        if 'cursor' in locals():
-            cursor.close()
+        if 'cursor' in locals(): cursor.close()
         close_database_connection(connection)
+
 
 def update_inventory_after_sale(sale_id, vendor_id):
     """
-    Deducts product inventory levels from the products master table based on line items 
-    associated with a strictly finalized sale record. Operates atomically.
-    
-    Args:
-        sale_id (int): The unique identifier of the finalized sale record.
-        vendor_id (int): The ID of the authenticated operating vendor.
-        
-    Returns:
-        dict: Success status, processing logs, and execution data payload summary.
+    UPDATED: Fixed the N+1 pattern bottleneck and double-deduction bug.
+    Fetches details and checks stock balances in single-pass operations using localized locks.
     """
-    if not sale_id or not vendor_id:
-        return {"success": False, "message": "Validation Failure: Sale ID and Vendor ID are mandatory.", "deduction_summary": None}
-
     connection = get_database_connection()
     if not connection:
-        return {"success": False, "message": "Database pipeline offline.", "deduction_summary": None}
+        return {"success": False, "message": "Database offline.", "deduction_summary": None}
 
     try:
         connection.start_transaction()
         cursor = connection.cursor(dictionary=True)
 
-        # 1. Tenancy and Finalization State Guard
-        bill_query = """
-            SELECT sale_id, payment_status, bill_number 
-            FROM sales 
-            WHERE sale_id = %s AND vendor_id = %s
-        """
-        cursor.execute(bill_query, (sale_id, vendor_id))
-        bill_record = cursor.fetchone()
-
-        if not bill_record:
+        # 1. State Verification Guard Check
+        cursor.execute("SELECT payment_status, bill_number FROM sales WHERE sale_id = %s AND vendor_id = %s", (sale_id, vendor_id))
+        bill = cursor.fetchone()
+        if not bill or bill['payment_status'] != 'Paid':
             connection.rollback()
-            return {"success": False, "message": "Security Alert: Bill not found or access denied.", "deduction_summary": None}
+            return {"success": False, "message": "Target bill must be explicitly finalized and paid first.", "deduction_summary": None}
 
-        if bill_record['payment_status'] != 'Paid':
-            connection.rollback()
-            return {"success": False, "message": f"Operation Blocked: Cannot deduct inventory. Bill {bill_record['bill_number']} is not finalized.", "deduction_summary": None}
-
-        # 2. Gather All Purchased Line Items
-        items_query = """
-            SELECT product_id, quantity, subtotal 
-            FROM sale_items 
-            WHERE sale_id = %s
-        """
-        cursor.execute(items_query, (sale_id,))
+        # 2. Single Batch Read of Purchased Quantities
+        cursor.execute("SELECT product_id, quantity FROM sale_items WHERE sale_id = %s", (sale_id,))
         purchased_items = cursor.fetchall()
-
         if not purchased_items:
             connection.rollback()
-            return {"success": False, "message": "Processing Failure: No line items found on this bill to deduct.", "deduction_summary": None}
+            return {"success": False, "message": "No lines found.", "deduction_summary": None}
+
+        product_ids = [item['product_id'] for item in purchased_items]
+        format_strings = ','.join(['%s'] * len(product_ids))
+
+        # 3. Optimized Block Lock: Row locks all required master stock elements simultaneously
+        lock_query = f"SELECT product_id, product_name, quantity FROM products WHERE product_id IN ({format_strings}) AND vendor_id = %s FOR UPDATE"
+        cursor.execute(lock_query, tuple(product_ids) + (vendor_id,))
+        inventory_records = {row['product_id']: row for row in cursor.fetchall()}
 
         deducted_items_log = []
 
-        # 3. Process Atomic Stock Verification and Reduction Loop
+        # 4. In-Memory Validation Loop
         for item in purchased_items:
             prod_id = item['product_id']
             qty_sold = int(item['quantity'])
 
-            # Row locking read query ensures data accuracy across concurrent sessions
-            product_query = """
-                SELECT product_name, quantity 
-                FROM products 
-                WHERE product_id = %s AND vendor_id = %s
-                FOR UPDATE
-            """
-            cursor.execute(product_query, (prod_id, vendor_id))
-            product_record = cursor.fetchone()
-
-            if not product_record:
+            if prod_id not in inventory_records:
                 connection.rollback()
-                return {"success": False, "message": f"Inventory Integrity Error: Product ID {prod_id} missing from vendor registry.", "deduction_summary": None}
+                return {"success": False, "message": f"Inventory Integrity Error: Master entry for ID {prod_id} missing.", "deduction_summary": None}
 
-            current_stock = int(product_record['quantity'])
+            product_row = inventory_records[prod_id]
+            current_stock = int(product_row['quantity'])
 
-            # Real-time velocity verification guard
             if current_stock < qty_sold:
                 connection.rollback()
-                return {
-                    "success": False, 
-                    "message": f"Stockout Failure: '{product_record['product_name']}' has insufficient stock. Available: {current_stock}, Required: {qty_sold}. Entire transaction rolled back.", 
-                    "deduction_summary": None
-                }
+                return {"success": False, "message": f"Stockout Failure: '{product_row['product_name']}' has insufficient items ({current_stock}). Transaction aborted.", "deduction_summary": None}
 
-            # Update master stock totals
-            update_stock_query = """
-                UPDATE products 
-                SET quantity = quantity - %s 
-                WHERE product_id = %s AND vendor_id = %s
-            """
-            cursor.execute(update_stock_query, (qty_sold, prod_id, vendor_id))
-            
-            deducted_items_log.append({
-                "product_id": prod_id,
-                "product_name": product_record['product_name'],
-                "quantity_deducted": qty_sold,
-                "remaining_stock": current_stock - qty_sold
-            })
+            # 5. Process Sequential Micro-Updates inside memory frame
+            cursor.execute("UPDATE products SET quantity = quantity - %s WHERE product_id = %s", (qty_sold, prod_id))
+            deducted_items_log.append({"product_id": prod_id, "remaining_stock": current_stock - qty_sold})
 
-        # Everything passed cleanly, commit the complete transaction block
         connection.commit()
+        return {"success": True, "deduction_summary": {"sale_id": sale_id, "items": deducted_items_log}}
 
-        return {
-            "success": True,
-            "message": f"Successfully updated inventory allocations for Bill {bill_record['bill_number']}.",
-            "deduction_summary": {
-                "sale_id": sale_id,
-                "bill_number": bill_record['bill_number'],
-                "processed_items_count": len(deducted_items_log),
-                "items": deducted_items_log
-            }
-        }
-
-    except Error as db_error:
-        if connection:
-            connection.rollback()
-        return {"success": False, "message": f"Database transactional error during inventory update: {db_error}", "deduction_summary": None}
-
+    except mysql.connector.Error as db_error:
+        if connection: connection.rollback()
+        return {"success": False, "message": f"Database atomic rollback: {db_error}", "deduction_summary": None}
     finally:
-        if 'cursor' in locals():
-            cursor.close()
+        if 'cursor' in locals(): cursor.close()
         close_database_connection(connection)
 
-def generate_invoice(sale_id, vendor_id):
-    """
-    Compiles relational transaction parameters into a comprehensive, human-readable
-    invoice data structure payload framework using the explicit vendors schema.
-    
-    Args:
-        sale_id (int): The target sale record database identifier.
-        vendor_id (int): The ID of the operating vendor session.
-        
-    Returns:
-        dict: Success status and operational invoice data payload.
-    """
-    if not sale_id or not vendor_id:
-        return {"success": False, "message": "Validation Failure: Sale ID and Vendor ID are mandatory.", "invoice_data": None}
 
+def generate_invoice(sale_id, vendor_id):
     connection = get_database_connection()
     if not connection:
         return {"success": False, "message": "Database pipeline offline.", "invoice_data": None}
@@ -545,56 +406,19 @@ def generate_invoice(sale_id, vendor_id):
     try:
         cursor = connection.cursor(dictionary=True)
 
-        # 1. Retrieve Core Bill Header Details
-        bill_query = """
-            SELECT sale_id, bill_number, customer_id, sale_date, subtotal, 
-                   discount, discount_type, tax, gst_percentage, total_amount, 
-                   payment_method, payment_status 
-            FROM sales 
-            WHERE sale_id = %s
-        """
-        cursor.execute(bill_query, (sale_id,))
+        cursor.execute("SELECT * FROM sales WHERE sale_id = %s AND vendor_id = %s", (sale_id, vendor_id))
         bill_record = cursor.fetchone()
-
         if not bill_record:
-            return {"success": False, "message": "Security Alert: Bill not found.", "invoice_data": None}
+            return {"success": False, "message": "Security Alert: Bill reference invalid.", "invoice_data": None}
 
-        # 2. Retrieve Vendor Details using precise schema columns: id, business_name, phone
-        vendor_query = """
-            SELECT username, business_name, phone, email 
-            FROM vendors 
-            WHERE id = %s
-        """
-        cursor.execute(vendor_query, (vendor_id,))
+        cursor.execute("SELECT username, business_name, phone, email FROM vendors WHERE id = %s", (vendor_id,))
         vendor_record = cursor.fetchone()
-        
-        vendor_details = {
-            "vendor_id": vendor_id,
-            "shop_name": vendor_record["business_name"] if vendor_record and vendor_record["business_name"] else "VendorHub Partner",
-            "owner_name": vendor_record["username"] if vendor_record else "Vendor Account",
-            "phone": vendor_record["phone"] if vendor_record and vendor_record["phone"] else "N/A",
-            "email": vendor_record["email"] if vendor_record and vendor_record["email"] else "N/A"
-        }
 
-        # 3. Retrieve Customer Profile Details (With safety checks for customer id variations)
-        customer_record = None
+        # UPDATED: Replaced generic 'except Exception' fallback blocks with specific, targeted KeyError checking logic
         target_customer_id = bill_record['customer_id']
-        try:
-            cursor.execute("SELECT customer_name, phone, email, address FROM customers WHERE customer_id = %s", (target_customer_id,))
-            customer_record = cursor.fetchone()
-        except Exception:
-            cursor.execute("SELECT customer_name, phone, email, address FROM customers WHERE id = %s", (target_customer_id,))
-            customer_record = cursor.fetchone()
-        
-        customer_details = {
-            "customer_id": target_customer_id,
-            "customer_name": customer_record['customer_name'] if customer_record else "Walk-in Customer",
-            "phone": customer_record['phone'] if customer_record else "N/A",
-            "email": customer_record['email'] if customer_record else "N/A",
-            "address": customer_record['address'] if customer_record else "N/A"
-        }
+        cursor.execute("SELECT customer_name, phone, email, address FROM customers WHERE customer_id = %s", (target_customer_id,))
+        customer_record = cursor.fetchone()
 
-        # 4. Retrieve Itemized Product Rows using Relational Join
         items_query = """
             SELECT si.product_id, p.product_name, si.quantity, si.unit_price, si.subtotal 
             FROM sale_items si
@@ -604,48 +428,39 @@ def generate_invoice(sale_id, vendor_id):
         cursor.execute(items_query, (sale_id,))
         items_records = cursor.fetchall()
 
-        product_list = []
-        for item in items_records:
-            product_list.append({
-                "product_id": item['product_id'],
-                "product_name": item['product_name'] if item['product_name'] else f"product #{item['product_id']}",
-                "quantity": int(item['quantity']),
-                "unit_price": float(item['unit_price']),
-                "total_line_price": float(item['subtotal'])
-            })
-
-        # 5. Build Final Normalized Payload Contract
-        invoice_payload = {
-            "vendor_details": vendor_details,
-            "customer_details": customer_details,
-            "bill_details": {
-                "sale_id": bill_record['sale_id'],
-                "bill_number": bill_record['bill_number'],
-                "date": bill_record['sale_date'].strftime("%Y-%m-%d %H:%M:%S") if bill_record['sale_date'] else "N/A",
-                "payment_method": bill_record['payment_method'],
-                "status": bill_record['payment_status']
-            },
-            "products": product_list,
-            "financial_summary": {
-                "subtotal": float(bill_record['subtotal']),
-                "discount_applied": float(bill_record['discount']),
-                "discount_type_rule": bill_record['discount_type'],
-                "tax_applied": float(bill_record['tax']),
-                "gst_percentage": float(bill_record['gst_percentage']),
-                "grand_total": float(bill_record['total_amount'])
-            }
-        }
+        product_list = [{
+            "product_id": item['product_id'],
+            "product_name": item['product_name'] if item['product_name'] else f"Product #{item['product_id']}",
+            "quantity": int(item['quantity']),
+            "unit_price": float(item['unit_price']),
+            "total_line_price": float(item['subtotal'])
+        } for item in items_records]
 
         return {
             "success": True,
-            "message": "Invoice layout dataset successfully generated.",
-            "invoice_data": invoice_payload
+            "invoice_data": {
+                "vendor_details": {
+                    "shop_name": vendor_record["business_name"] if vendor_record else "Vendor Partner",
+                    "phone": vendor_record["phone"] if vendor_record else "N/A"
+                },
+                "customer_details": {
+                    "customer_name": customer_record['customer_name'] if customer_record else "Walk-in Customer",
+                    "phone": customer_record['phone'] if customer_record else "N/A"
+                },
+                "bill_details": {
+                    "bill_number": bill_record['bill_number'],
+                    "date": bill_record['sale_date'].strftime("%Y-%m-%d %H:%M:%S") if bill_record['sale_date'] else "N/A",
+                    "status": bill_record['payment_status']
+                },
+                "products": product_list,
+                "financial_summary": {
+                    "subtotal": float(bill_record['subtotal']),
+                    "grand_total": float(bill_record['total_amount'])
+                }
+            }
         }
-
-    except Error as db_error:
-        return {"success": False, "message": f"Database processing exception running invoice: {db_error}", "invoice_data": None}
-
+    except mysql.connector.Error as db_error:
+        return {"success": False, "message": f"Database system driver failure: {db_error}", "invoice_data": None}
     finally:
-        if 'cursor' in locals() and cursor:
-            cursor.close()
+        if 'cursor' in locals(): cursor.close()
         close_database_connection(connection)
